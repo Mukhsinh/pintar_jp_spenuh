@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "supabase": {
-      "url": "https://mcp.supabase.com/mcp?project_ref=vdyvkzynvzlwbbjzlwml",
+      "url": "https://mcp.supabase.com/mcp?project_ref=hatrvqeihrjczsqxmfqf",
       "autoApprove": [
         "apply_migration",
         "list_tables",

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import {
   isPublicRoute,
   isLegacyRoute,
@@ -190,8 +191,7 @@ export async function middleware(request: NextRequest) {
     let employeeData = employeeCache.get(session.user.id)
 
     // Check if cached role matches auth metadata role
-    // If not, invalidate cache to pick up the updated role
-    const sessionMetadataRole = session.user.user_metadata?.role
+    const sessionMetadataRole = session.user.user_metadata?.role || session.user.app_metadata?.role
     if (employeeData && sessionMetadataRole && employeeData.role !== sessionMetadataRole) {
       employeeData = null // Invalidate cache
     }
@@ -202,7 +202,11 @@ export async function middleware(request: NextRequest) {
       const appMeta = session.user.app_metadata || {}
 
       const rawRole = (appMeta.role || userMeta.role || '').toString().toLowerCase()
-      const isAdmin = rawRole === 'superadmin' || rawRole === 'admin' || session.user.email === 'admin@sungaibahar.com'
+      const isAdmin =
+        rawRole === 'superadmin' ||
+        rawRole === 'admin' ||
+        session.user.email === 'admin@sungaibahar.com' ||
+        session.user.email === 'admin@soeselors.com'
 
       if (isAdmin) {
         employeeData = {
@@ -211,23 +215,49 @@ export async function middleware(request: NextRequest) {
         }
         employeeCache.set(session.user.id, employeeData)
       } else {
-        // 2. Fetch employee record for others
-        const { data: employee, error: employeeError } = await supabase
+        // 2. Fetch employee record using admin client (bypasses RLS in middleware to prevent auth loops)
+        const adminSupabase = createSupabaseClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+
+        let { data: employee } = await adminSupabase
           .from('m_employees')
-          .select('role, is_active')
+          .select('id, role, is_active, user_id')
           .eq('user_id', session.user.id)
           .limit(1)
           .maybeSingle()
 
-        if (employeeError || !employee) {
-          console.error('[MIDDLEWARE] User not found in employees and no admin metadata:', session.user.email)
+        // Fallback: check by email if not found by user_id
+        if (!employee && session.user.email) {
+          const { data: empByEmail } = await adminSupabase
+            .from('m_employees')
+            .select('id, role, is_active, user_id')
+            .eq('email', session.user.email)
+            .limit(1)
+            .maybeSingle()
+
+          if (empByEmail) {
+            employee = empByEmail
+            // Sync user_id in m_employees
+            await adminSupabase
+              .from('m_employees')
+              .update({ user_id: session.user.id, updated_at: new Date().toISOString() })
+              .eq('id', empByEmail.id)
+          }
+        }
+
+        if (!employee) {
+          console.error('[MIDDLEWARE] User not found in employees:', session.user.email)
           const loginUrl = new URL('/login', request.url)
           loginUrl.searchParams.set('error', 'user_not_found')
           return NextResponse.redirect(loginUrl)
         }
 
+        const resolvedRole = (employee.role === 'superadmin' ? 'superadmin' : (employee.role || 'employee')) as Role
         employeeData = {
-          role: (employee.role || 'employee') as Role,
+          role: resolvedRole,
           is_active: !!employee.is_active
         }
         employeeCache.set(session.user.id, employeeData)

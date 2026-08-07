@@ -6,8 +6,11 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://omlbijupllrglmebbqnn.supabase.co'
-const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tbGJpanVwbGxyZ2xtZWJicW5uIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjY5MjExMSwiZXhwIjoyMDg4MjY4MTExfQ.xi0dZznj9Nybfsyw-mEP1459l0GnQqZmwQmfievYq8U'
+import * as dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kwgyhedinqisgimdvzlu.supabase.co'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3Z3loZWRpbnFpc2dpbWR2emx1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA0NDA1MiwiZXhwIjoyMTAxNjIwMDUyfQ.98fZOHH4OJIpjYE7K5MFISDH4-ZQUpL7uR3fE-i7YpM'
 
 async function testConnection() {
   console.log('🧪 Testing Database Connection...\n')
@@ -23,13 +26,13 @@ async function testConnection() {
       .limit(3)
 
     if (error) {
-      console.error('❌ Database connection failed:', error.message)
+      console.error('❌ Database query error:', error)
       return false
     }
 
     console.log(`✅ Database connected successfully`)
     console.log(`✅ Found ${units?.length || 0} active units`)
-    
+
     if (units && units.length > 0) {
       units.forEach(unit => {
         console.log(`   - ${unit.code}: ${unit.name}`)

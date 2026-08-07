@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export interface SettingsPayload {
@@ -35,25 +35,53 @@ export async function saveSettings(
 ): Promise<{ success: boolean; error: string | null }> {
   const supabase = await createClient()
 
-  // Verify caller is superadmin
+  // Verify caller user
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   if (!user) return { success: false, error: 'Tidak terautentikasi' }
 
-  const { data: emp } = await supabase
-    .from('m_employees')
-    .select('id, role')
-    .eq('user_id', user.id)
-    .single()
+  const adminClient = await createAdminClient()
 
-  if (!emp || emp.role !== 'superadmin') {
+  // Check superadmin privileges from metadata, email, or m_employees
+  let isSuperAdmin = false
+  let updatedBy: string | null = null
+
+  const metaRole = user.user_metadata?.role || user.app_metadata?.role
+  const userEmail = user.email || ''
+
+  if (
+    metaRole === 'superadmin' ||
+    userEmail === 'admin@sungaipenuh.com' ||
+    userEmail === 'admin@sungaibahar.com' ||
+    userEmail === 'admin@soeselors.com'
+  ) {
+    isSuperAdmin = true
+  }
+
+  try {
+    const { data: emp } = await adminClient
+      .from('m_employees')
+      .select('id, role')
+      .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
+      .maybeSingle()
+
+    if (emp) {
+      if (emp.role === 'superadmin') {
+        isSuperAdmin = true
+      }
+      updatedBy = emp.id
+    }
+  } catch (err) {
+    console.warn('Error fetching employee record for settings save check:', err)
+  }
+
+  if (!isSuperAdmin) {
     return { success: false, error: 'Akses ditolak: hanya superadmin' }
   }
 
   const now = new Date().toISOString()
-  const updatedBy = emp.id
 
   const entries = [
     { key: 'company_info', value: payload.company_info },
@@ -66,7 +94,7 @@ export async function saveSettings(
   ]
 
   for (const entry of entries) {
-    const { error } = await supabase
+    const { error } = await adminClient
       .from('t_settings')
       .upsert(
         { key: entry.key, value: entry.value, updated_by: updatedBy, updated_at: now },

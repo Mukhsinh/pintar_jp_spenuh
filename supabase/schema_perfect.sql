@@ -395,42 +395,63 @@ GROUP BY e.id, e.full_name, e.unit_id, u.name, p.period;
 -- ============================================
 
 ALTER TABLE m_units ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin full access on units" ON m_units;
 CREATE POLICY "Superadmin full access on units" ON m_units FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS "Everyone can view active units" ON m_units;
 CREATE POLICY "Everyone can view active units" ON m_units FOR SELECT USING (is_active = true);
 
 ALTER TABLE m_employees ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin full access on employees" ON m_employees;
 CREATE POLICY "Superadmin full access on employees" ON m_employees FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS "Managers can view same unit" ON m_employees;
 CREATE POLICY "Managers can view same unit" ON m_employees FOR SELECT USING (is_unit_manager() AND unit_id = get_user_unit_id());
+DROP POLICY IF EXISTS "Employees can view self" ON m_employees;
 CREATE POLICY "Employees can view self" ON m_employees FOR SELECT USING (user_id = auth.uid());
 
 ALTER TABLE m_kpi_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin full access on categories" ON m_kpi_categories;
 CREATE POLICY "Superadmin full access on categories" ON m_kpi_categories FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS "Users can view categories" ON m_kpi_categories;
 CREATE POLICY "Users can view categories" ON m_kpi_categories FOR SELECT USING (true);
 
 ALTER TABLE m_kpi_indicators ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin full access on indicators" ON m_kpi_indicators;
 CREATE POLICY "Superadmin full access on indicators" ON m_kpi_indicators FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS "Users can view indicators" ON m_kpi_indicators;
 CREATE POLICY "Users can view indicators" ON m_kpi_indicators FOR SELECT USING (true);
 
 ALTER TABLE m_kpi_sub_indicators ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin full access on sub indicators" ON m_kpi_sub_indicators;
 CREATE POLICY "Superadmin full access on sub indicators" ON m_kpi_sub_indicators FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS "Users can view sub indicators" ON m_kpi_sub_indicators;
 CREATE POLICY "Users can view sub indicators" ON m_kpi_sub_indicators FOR SELECT USING (true);
 
 ALTER TABLE t_kpi_assessments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin full access on assessments" ON t_kpi_assessments;
 CREATE POLICY "Superadmin full access on assessments" ON t_kpi_assessments FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS "Managers can manage unit assessments" ON t_kpi_assessments;
 CREATE POLICY "Managers can manage unit assessments" ON t_kpi_assessments FOR ALL 
   USING (is_unit_manager() AND EXISTS (SELECT 1 FROM m_employees WHERE id = t_kpi_assessments.employee_id AND unit_id = get_user_unit_id()));
 
 ALTER TABLE t_audit_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Superadmin only audit" ON t_audit_log;
 CREATE POLICY "Superadmin only audit" ON t_audit_log FOR SELECT USING (is_superadmin());
 
 -- ============================================
 -- TRIGGERS
 -- ============================================
 
+DROP TRIGGER IF EXISTS trg_units_updated_at ON m_units;
 CREATE TRIGGER trg_units_updated_at BEFORE UPDATE ON m_units FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS trg_employees_updated_at ON m_employees;
 CREATE TRIGGER trg_employees_updated_at BEFORE UPDATE ON m_employees FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS trg_categories_updated_at ON m_kpi_categories;
 CREATE TRIGGER trg_categories_updated_at BEFORE UPDATE ON m_kpi_categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS trg_indicators_updated_at ON m_kpi_indicators;
 CREATE TRIGGER trg_indicators_updated_at BEFORE UPDATE ON m_kpi_indicators FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS trg_sub_indicators_updated_at ON m_kpi_sub_indicators;
 CREATE TRIGGER trg_sub_indicators_updated_at BEFORE UPDATE ON m_kpi_sub_indicators FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS trg_assessments_updated_at ON t_kpi_assessments;
 CREATE TRIGGER trg_assessments_updated_at BEFORE UPDATE ON t_kpi_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS trg_settings_updated_at ON t_settings;
 CREATE TRIGGER trg_settings_updated_at BEFORE UPDATE ON t_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

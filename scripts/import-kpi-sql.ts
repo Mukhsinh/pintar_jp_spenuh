@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 
-const url = 'https://hatrvqeihrjczsqxmfqf.supabase.co';
-const serviceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhdHJ2cWVpaHJqY3pzcXhtZnFmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTE4Mjc3MCwiZXhwIjoyMTAwNzU4NzcwfQ.nRdBYzFXOuEMbl100XxJ1k4FSzkgGe7anptMC9CS2WY';
+dotenv.config({ path: '.env.local' });
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kwgyhedinqisgimdvzlu.supabase.co';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const supabase = createClient(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false }

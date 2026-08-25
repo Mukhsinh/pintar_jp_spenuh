@@ -123,32 +123,24 @@ export async function GET(request: NextRequest) {
 async function generatePDFReport(unit: any, categories: any[], appSettings: any) {
   const { jsPDF } = await import('jspdf')
   const autoTable = (await import('jspdf-autotable')).default
+  const { addKopSurat, addPdfFooters } = await import('@/lib/export/pdf-export')
+  const { getCompanyInfoServer, getFooterServer } = await import('@/lib/services/settings.server.service')
+
+  const companyInfo = await getCompanyInfoServer()
+  const footerText = await getFooterServer()
 
   const doc = new jsPDF()
 
   // Professional Kop Surat
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text('PEMERINTAH KABUPATEN MUARO JAMBI', 105, 15, { align: 'center' })
-  doc.setFontSize(16)
-  doc.text('RUMAH SAKIT SUNGAI BAHAR', 105, 22, { align: 'center' })
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Kabupaten Muaro Jambi, Provinsi Jambi', 105, 28, { align: 'center' })
-  doc.text('Email: admin@sungaibahar.com', 105, 33, { align: 'center' })
-
-  doc.setLineWidth(0.5)
-  doc.line(20, 38, 190, 38)
-  doc.setLineWidth(0.2)
-  doc.line(20, 39, 190, 39)
+  await addKopSurat(doc, companyInfo)
 
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text('LAPORAN KONFIGURASI KPI UNIT', 105, 50, { align: 'center' })
+  doc.text('LAPORAN KONFIGURASI KPI UNIT', 105, 42, { align: 'center' })
   doc.setFontSize(11)
-  doc.text(`${unit.code} - ${unit.name}`, 105, 56, { align: 'center' })
+  doc.text(`${unit.code} - ${unit.name}`, 105, 48, { align: 'center' })
   doc.setFontSize(9)
-  doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 105, 62, { align: 'center' })
+  doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 105, 54, { align: 'center' })
 
   let currentY = 70
   let grandTotalIndicators = 0
@@ -238,16 +230,7 @@ async function generatePDFReport(unit: any, categories: any[], appSettings: any)
   currentY += 5
   doc.text(`Total Sub-Indikator: ${grandTotalSubIndicators}`, 20, currentY)
 
-  // Footer
-  const pageCount = (doc as any).internal.getNumberOfPages()
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i)
-    doc.setFontSize(8)
-    doc.text(`Halaman ${i} dari ${pageCount}`, 105, 285, { align: 'center' })
-    if (appSettings.footerText) {
-      doc.text(appSettings.footerText, 105, 290, { align: 'center' })
-    }
-  }
+  await addPdfFooters(doc, footerText)
 
   const pdfOutput = doc.output('arraybuffer')
 

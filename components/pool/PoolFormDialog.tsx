@@ -14,6 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { createPoolAction } from '@/app/(authenticated)/pool/actions'
+
 interface PoolFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -78,36 +80,19 @@ export default function PoolFormDialog({
     setIsSubmitting(true)
 
     try {
-      const supabase = createClient()
-      // Check if period already exists
-      const { data: existingPool, error: checkError } = await supabase
-        .from('t_pool')
-        .select('id')
-        .eq('period', formData.period)
-        .single()
+      const res = await createPoolAction({
+        period: formData.period,
+        global_allocation_percentage: parseFloat(formData.global_allocation_percentage)
+      })
 
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw checkError
-      }
-
-      if (existingPool) {
-        setErrors({ period: 'Pool sudah ada untuk periode ini' })
-        setIsSubmitting(false)
+      if (!res.success) {
+        if (res.error?.includes('sudah ada')) {
+          setErrors({ period: res.error })
+        } else {
+          alert(res.error || 'Gagal membuat pool')
+        }
         return
       }
-
-      // Create new pool
-      const { error } = await supabase
-        .from('t_pool')
-        .insert({
-          period: formData.period,
-          global_allocation_percentage: parseFloat(formData.global_allocation_percentage),
-          revenue_total: 0,
-          deduction_total: 0,
-          status: 'draft'
-        })
-
-      if (error) throw error
 
       alert('Pool berhasil dibuat!')
       onSuccess()

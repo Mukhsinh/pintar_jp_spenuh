@@ -8,15 +8,21 @@ import { Loader2, Eye, EyeOff, Mail, Lock, MessageCircle } from 'lucide-react'
 
 import { useSettings } from '@/lib/contexts/settings-context'
 
+import { loginServerAction } from '@/app/login/actions'
+
 function getErrorMessage(code: string | null): string | null {
   if (!code) return null
   const msgs: Record<string, string> = {
     session_expired: 'Sesi Anda telah berakhir, silakan masuk kembali',
-    inactive: 'Akun Anda tidak aktif, hubungi administrator',
-    user_not_found: 'Data pengguna tidak ditemukan',
+    inactive: 'Akun Anda tidak aktif, silakan hubungi administrator',
+    user_not_found: 'Data pegawai tidak ditemukan untuk akun ini',
     unexpected: 'Terjadi kesalahan, silakan coba lagi',
+    'Invalid login credentials': 'Email atau kata sandi yang Anda masukkan salah',
+    'Email not confirmed': 'Email belum dikonfirmasi',
+    'User not found': 'Pengguna tidak ditemukan',
+    'Too many requests': 'Terlalu banyak percobaan login (Rate Limit). Silakan tunggu 1-2 menit.',
   }
-  return msgs[code] || 'Terjadi kesalahan, silakan coba lagi'
+  return msgs[code] || code
 }
 
 export default function LoginPage() {
@@ -33,9 +39,6 @@ export default function LoginPage() {
     setIsMounted(true)
     const code = searchParams.get('error')
     if (code) setError(getErrorMessage(code))
-
-    // Thoroughly clear any stale sessions on mount
-    clearAuthStorage(true)
   }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -45,35 +48,15 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      // Force a fresh client and clear local state one last time before sign in
-      const supabase = createClient(true)
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => { })
+      const result = await loginServerAction({ email, password })
 
-      const { data: auth, error: authErr } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      })
-
-      if (authErr) {
-        setError(authErr.message || 'Email atau kata sandi salah')
+      if (!result.success) {
+        setError(result.error || 'Email atau kata sandi salah')
         setIsLoading(false)
         return
       }
 
-      if (!auth.user || !auth.session) {
-        setError('Gagal membuat sesi, silakan coba lagi')
-        setIsLoading(false)
-        return
-      }
-
-      try {
-        await fetch('/api/users/sync-role', { method: 'POST' })
-      } catch (syncErr) {
-        console.error('[LOGIN] Sync role failed:', syncErr)
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 800))
-      window.location.replace('/dashboard')
+      window.location.href = '/dashboard'
     } catch (err: any) {
       console.error('[LOGIN] Unexpected error:', err)
       setError('Terjadi kesalahan sistem: ' + (err.message || 'Silakan coba lagi'))
@@ -93,7 +76,7 @@ export default function LoginPage() {
 
   const companyInfo = settings?.companyInfo
   const logoSrc = companyInfo?.logo || "/logo.png"
-  const orgName = companyInfo?.name || "RS Sungai Bahar"
+  const orgName = companyInfo?.name || "SISTEM JASPEL"
 
   return (
     <div className="h-screen flex flex-col items-center justify-center bg-gray-50/50 p-2 font-sans overflow-hidden">

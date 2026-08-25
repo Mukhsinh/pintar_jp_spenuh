@@ -118,8 +118,8 @@ function IncentiveTable({ data }: { data: any[] }) {
     <table className="w-full border-collapse text-sm">
       <thead>
         <tr className="bg-gray-100">
-          {['NIP/NIK', 'NAMA PEGAWAI', 'UNIT', 'P1', 'P2', 'P3', 'SKOR INDEKS', 'PIR', 'RUPIAH KUANTITATIF', 'GROSS', 'PAJAK', 'NET'].map(h => (
-            <th key={h} className={`border p-2 ${['P1', 'P2', 'P3', 'SKOR INDEKS', 'PIR', 'RUPIAH KUANTITATIF', 'GROSS', 'PAJAK', 'NET'].includes(h) ? 'text-right' : 'text-left'} font-semibold text-[10px]`}>{h}</th>
+          {['NIP/NIK', 'NAMA PEGAWAI', 'UNIT', 'P1', 'P2', 'P3', 'PRIORITAS', 'SKOR INDEKS', 'PIR', 'RUPIAH KUANTITATIF', 'GROSS', 'PAJAK', 'NET'].map(h => (
+            <th key={h} className={`border p-2 ${['P1', 'P2', 'P3', 'PRIORITAS', 'SKOR INDEKS', 'PIR', 'RUPIAH KUANTITATIF', 'GROSS', 'PAJAK', 'NET'].includes(h) ? 'text-right' : 'text-left'} font-semibold text-[10px]`}>{h}</th>
           ))}
         </tr>
       </thead>
@@ -132,6 +132,7 @@ function IncentiveTable({ data }: { data: any[] }) {
             <td className="border p-2 text-right">{formatNumber(Number(row.p1_score) || 0, 2)}</td>
             <td className="border p-2 text-right">{formatNumber(Number(row.p2_score) || 0, 2)}</td>
             <td className="border p-2 text-right">{formatNumber(Number(row.p3_score) || 0, 2)}</td>
+            <td className="border p-2 text-right text-purple-700 font-semibold">{formatNumber(Number(row.priority_score) || 0, 2)}</td>
             <td className="border p-2 text-right font-bold text-blue-700">{formatNumber(Number(row.total_score) || 0, 2)}</td>
             <td className="border p-2 text-right text-purple-600">{formatCurrency(Number(row.pir_value) || 0)}</td>
             <td className="border p-2 text-right font-semibold text-orange-600">

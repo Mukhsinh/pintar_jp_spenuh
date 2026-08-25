@@ -62,43 +62,133 @@ interface ReportExportOptions {
   data: any[]
 }
 
+const logoCache = new Map<string, { dataUrl: string; format: string }>()
+
+async function getImageDataUrl(url: string): Promise<{ dataUrl: string; format: string } | null> {
+  if (!url || typeof url !== 'string') return null
+  if (logoCache.has(url)) return logoCache.get(url)!
+
+  if (url.startsWith('data:image/')) {
+    const format = url.includes('data:image/png') ? 'PNG' : 'JPEG'
+    const res = { dataUrl: url, format }
+    logoCache.set(url, res)
+    return res
+  }
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      const arrayBuffer = await res.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      const mimeType = res.headers.get('content-type') || 'image/jpeg'
+      const base64 = buffer.toString('base64')
+      const format = mimeType.includes('png') ? 'PNG' : 'JPEG'
+      const result = { dataUrl: `data:${mimeType};base64,${base64}`, format }
+      logoCache.set(url, result)
+      return result
+    } catch (e) {
+      console.error('Error fetching remote logo for PDF Kop Surat:', e)
+      return null
+    }
+  }
+  return null
+}
+
 /**
  * Helper to add professional Kop Surat (Header) to PDF
  */
-async function addKopSurat(doc: jsPDF, companyInfo: any) {
-  // Add logo if exists
-  if (companyInfo.logo) {
+export async function addKopSurat(doc: jsPDF, companyInfo?: any) {
+  if (!companyInfo) {
+    companyInfo = await getCompanyInfoServer()
+  }
+
+  const pageWidth = doc.internal.pageSize.width
+  const centerX = pageWidth / 2
+
+  // Add logo on the left if present
+  if (companyInfo.logo && typeof companyInfo.logo === 'string') {
     try {
-      // Basic image support (base64 or URL)
-      if (companyInfo.logo.startsWith('data:image') || companyInfo.logo.startsWith('http')) {
-        doc.addImage(companyInfo.logo, 'PNG', 15, 8, 22, 22)
+      const img = await getImageDataUrl(companyInfo.logo)
+      if (img) {
+        doc.addImage(img.dataUrl, img.format, 15, 5, 22, 22)
       }
     } catch (e) {
-      console.error('Error adding logo to PDF:', e)
+      console.error('Error adding logo to PDF Kop Surat:', e)
     }
   }
 
-  const centerX = doc.internal.pageSize.width / 2
-
+  // Nama Instansi / Organisasi
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(16)
-  doc.text(companyInfo.name || 'JASPEL ENTERPRISE', centerX, 15, { align: 'center' })
+  doc.setFontSize(15)
+  doc.setTextColor(30, 58, 138) // Deep Navy (#1E3A8A)
+  const nameText = (companyInfo.name || companyInfo.appName || 'SISTEM JASPEL').toUpperCase()
+  doc.text(nameText, centerX, 13, { align: 'center' })
 
+  // Alamat
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.text(companyInfo.address || 'Jakarta, Indonesia', centerX, 22, { align: 'center' })
-
-  if (companyInfo.phone || companyInfo.email) {
-    const contact = [companyInfo.phone, companyInfo.email].filter(Boolean).join(' | ')
-    doc.setFontSize(8)
-    doc.text(contact, centerX, 27, { align: 'center' })
+  doc.setTextColor(51, 65, 85) // Slate (#334155)
+  const addressText = companyInfo.address || ''
+  if (addressText) {
+    doc.text(addressText, centerX, 19, { align: 'center' })
   }
 
-  doc.setDrawColor(0, 0, 0)
-  doc.setLineWidth(0.5)
-  doc.line(15, 32, doc.internal.pageSize.width - 15, 32)
-  doc.setLineWidth(0.2)
-  doc.line(15, 33, doc.internal.pageSize.width - 15, 33)
+  // Contact (Phone & Email)
+  const contactParts: string[] = []
+  if (companyInfo.phone) contactParts.push(`Telepon: ${companyInfo.phone}`)
+  if (companyInfo.email) contactParts.push(`Email: ${companyInfo.email}`)
+
+  if (contactParts.length > 0) {
+    doc.setFontSize(8.5)
+    doc.setTextColor(71, 85, 105)
+    doc.text(contactParts.join('  |  '), centerX, 24, { align: 'center' })
+  }
+
+  // Garis Kop Surat Double Line
+  const lineY = 28
+  doc.setDrawColor(30, 58, 138) // Navy Blue
+  doc.setLineWidth(1.2)
+  doc.line(15, lineY, pageWidth - 15, lineY)
+
+  doc.setDrawColor(148, 163, 184) // Light Gray
+  doc.setLineWidth(0.4)
+  doc.line(15, lineY + 1.2, pageWidth - 15, lineY + 1.2)
+
+  // Reset text color
+  doc.setTextColor(0, 0, 0)
+}
+
+/**
+ * Helper to add professional Footer to all pages in PDF
+ */
+export async function addPdfFooters(doc: jsPDF, customFooterText?: string) {
+  let footerText = customFooterText
+  if (!footerText) {
+    const { getFooterServer } = await import('@/lib/services/settings.server.service')
+    footerText = await getFooterServer()
+  }
+
+  const pageCount = (doc as any).internal.getNumberOfPages()
+  const pageWidth = doc.internal.pageSize.width
+  const pageHeight = doc.internal.pageSize.height
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+
+    // Separator line for footer
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.3)
+    doc.line(15, pageHeight - 12, pageWidth - 15, pageHeight - 12)
+
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(100, 116, 139)
+
+    doc.text(footerText || '© 2026 JASPEL Enterprise - Sistem Informasi Manajemen Jasa Pelayanan', 15, pageHeight - 6)
+    doc.text(`Halaman ${i} dari ${pageCount}`, pageWidth - 15, pageHeight - 6, { align: 'right' })
+  }
+
+  doc.setTextColor(0, 0, 0)
 }
 
 /**
@@ -829,9 +919,8 @@ export async function generateSystemOverviewPDF(): Promise<Uint8Array> {
   doc.setFontSize(14)
   doc.text('IX. KESIMPULAN & PENUTUP', 15, y); y += 10
 
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(11)
-  const closing = `Dengan diterapkannya ${appName}, diharapkan manajemen Rumah Sakit Sungai Bahar dapat mengelola sumber daya manusia dan keuangan secara lebih profesional, transparan, dan berbasis kinerja nyata.`
+  const orgName = companyInfo.name || 'instansi'
+  const closing = `Dengan diterapkannya ${appName}, diharapkan manajemen ${orgName} dapat mengelola sumber daya manusia dan keuangan secara lebih profesional, transparan, dan berbasis kinerja nyata.`
   const splitClosing = doc.splitTextToSize(closing, pageWidth - 30)
   doc.text(splitClosing, 15, y); y += (splitClosing.length * 6) + 20
 

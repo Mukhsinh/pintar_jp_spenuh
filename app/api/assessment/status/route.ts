@@ -118,13 +118,14 @@ export async function GET(request: NextRequest) {
     }
 
     const appRole = user.app_metadata?.role
-    const userRole = user.user_metadata?.role
-    const email = user.email
+    const userRoleMeta = user.user_metadata?.role
+    const email = user.email || ''
 
     const isSuperAdmin =
       appRole === 'superadmin' ||
-      userRole === 'superadmin' ||
-      email === 'admin@sungaibahar.com'
+      userRoleMeta === 'superadmin' ||
+      email === 'admin@sungaibahar.com' ||
+      email === 'admin@soeselors.com'
 
     // Use admin client for superadmin to bypass RLS, otherwise regular client
     const fetchClient = isSuperAdmin ? await createAdminClient() : supabase
@@ -136,20 +137,20 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (!currentEmployee) {
-      if (isSuperAdmin) {
-        currentEmployee = {
-          id: user.id,
-          full_name: 'Super Administrator',
-          role: 'superadmin',
-          unit_id: '0'
-        }
-      } else {
-        return NextResponse.json({ error: 'Employee record not found. Please contact admin to link your account.' }, { status: 404 })
+    if (currentEmployee) {
+      if (isSuperAdmin) currentEmployee.role = 'superadmin'
+    } else if (isSuperAdmin) {
+      currentEmployee = {
+        id: user.id,
+        full_name: 'Super Administrator',
+        role: 'superadmin',
+        unit_id: '0'
       }
+    } else {
+      return NextResponse.json({ error: 'Employee record not found. Please contact admin to link your account.' }, { status: 404 })
     }
 
-    const effectiveRole = currentEmployee.role || (isSuperAdmin ? 'superadmin' : 'employee')
+    const effectiveRole = isSuperAdmin ? 'superadmin' : (currentEmployee.role || 'employee')
     const effectiveUnitId = currentEmployee.unit_id
 
     const { searchParams } = new URL(request.url)

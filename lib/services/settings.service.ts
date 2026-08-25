@@ -242,9 +242,10 @@ export async function getSessionTimeout(): Promise<number> {
 export async function getCompanyInfo(): Promise<any> {
   const { data } = await getSetting('company_info')
   return data || {
-    appName: 'JASPEL',
-    name: 'JASPEL Enterprise',
-    address: 'Jakarta, Indonesia',
+    appName: 'PINTAR JP',
+    developerName: '',
+    name: '',
+    address: '',
     phone: '',
     email: '',
     logo: ''

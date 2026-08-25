@@ -1,47 +1,19 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { createAdminClient } from '../supabase/server'
+import { addKopSurat, addPdfFooters } from './pdf-export'
+import { getCompanyInfoServer, getFooterServer } from '../services/settings.server.service'
 
 export async function generateSystemGuide(unitId?: string): Promise<Buffer> {
   const adminClient = await createAdminClient()
 
-  // Get settings for Kop Surat
-  const { data: settingsData } = await adminClient
-    .from('t_settings')
-    .select('key, value')
-    .in('key', ['company_info', 'footer'])
-
-  let appSettings = {
-    appName: 'JASPEL',
-    organizationName: 'RUMAH SAKIT SUNGAI BAHAR',
-    footerText: ''
-  }
-
-  if (settingsData) {
-    const companyInfo = (settingsData.find(s => s.key === 'company_info')?.value as any) || {}
-    const footerInfo = (settingsData.find(s => s.key === 'footer')?.value as any) || {}
-    appSettings.appName = companyInfo.appName || appSettings.appName
-    appSettings.organizationName = companyInfo.name || appSettings.organizationName
-    appSettings.footerText = typeof footerInfo === 'string' ? footerInfo : (footerInfo.text || '')
-  }
+  const companyInfo = await getCompanyInfoServer()
+  const footerText = await getFooterServer()
 
   const doc = new jsPDF()
 
-  // Professional Kop Surat
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text('PEMERINTAH KABUPATEN MUARO JAMBI', 105, 15, { align: 'center' })
-  doc.setFontSize(16)
-  doc.text(appSettings.organizationName, 105, 22, { align: 'center' })
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Kabupaten Muaro Jambi, Provinsi Jambi', 105, 28, { align: 'center' })
-  doc.text('Email: admin@sungaibahar.com', 105, 33, { align: 'center' })
-
-  doc.setLineWidth(0.5)
-  doc.line(20, 38, 190, 38)
-  doc.setLineWidth(0.2)
-  doc.line(20, 39, 190, 39)
+  // Professional Kop Surat from settings
+  await addKopSurat(doc, companyInfo)
 
   if (!unitId) {
     // General System Guide
@@ -172,16 +144,7 @@ export async function generateSystemGuide(unitId?: string): Promise<Buffer> {
     }
   }
 
-  // Final Footer for all pages
-  const pageCount = (doc as any).internal.getNumberOfPages()
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i)
-    doc.setFontSize(8)
-    doc.text(`Halaman ${i} dari ${pageCount}`, 105, 285, { align: 'center' })
-    if (appSettings.footerText) {
-      doc.text(appSettings.footerText, 105, 290, { align: 'center' })
-    }
-  }
+  await addPdfFooters(doc, footerText)
 
   return Buffer.from(doc.output('arraybuffer'))
 }

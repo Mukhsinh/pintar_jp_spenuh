@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Get current user from auth
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -23,12 +23,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Employee profile not found' }, { status: 404 })
     }
 
-    // Only superadmin can access KPI config
-    if (employee.role !== 'superadmin') {
+    // Superadmin and unit_manager can access KPI config
+    if (employee.role !== 'superadmin' && employee.role !== 'unit_manager') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'KPI Config API is working',
       user: {
         name: employee.full_name,

@@ -562,7 +562,10 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
         const calcMethod = a.m_kpi_indicators?.calculation_method || 'indexing'
 
         const isPriority = calcMethod === 'priority'
-        const isActivityIndexing = (isActivityStyle || basicVal > 0) && !isPriority
+        const isActivityStyle = catMeta.configuration_style === 'activity'
+        // Priority indicator score goes to priorityScore, NOT activity rupiah or index score
+        // Activity indexing is ONLY when configuration_style is explicitly 'activity' or calcMethod is 'activity'
+        const isActivityIndexing = (isActivityStyle || calcMethod === 'activity') && !isPriority
 
         // Resolve effective score: prefer main row score, fallback to sub-assessment aggregate
         let effectiveScore: number
@@ -577,7 +580,10 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
         const indicatorScore = effectiveScore
 
         let activityValue = 0
-        if (isPriority || isActivityIndexing) {
+        if (isPriority) {
+          // Priority score tracks separately in indicatorScore
+          activityValue = indicatorScore
+        } else if (isActivityIndexing) {
           if (indicatorScore > 0 && (isActivityStyle || basicVal <= 1)) {
             activityValue = indicatorScore
           } else if (basicVal > 1) {
@@ -598,24 +604,27 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
           basic_value: basicVal,
           calculation_method: calcMethod,
           is_weighted: effectivelyWeighted && calcMethod === 'indexing',
-          is_activity: isPriority || isActivityIndexing,
+          is_activity: isActivityIndexing,
           activity_value: activityValue,
           is_priority: isPriority
         })
 
-        if (isPriority || isActivityIndexing) {
+        if (isPriority) {
+          // Priority score handled in calcEmployeeTotalScore return
+        } else if (isActivityIndexing) {
           totalActivityRupiah = Number(totalActivityRupiah) + Number(activityValue)
         } else {
+          // Indexing indicator (P1, P2, P3): add to totalRealisasi
           if (isMedicalUnit) {
-            totalRealisasi = Number(totalRealisasi) + Number(indRealization)
+            totalRealisasi = Number(totalRealisasi) + Number(indicatorScore || indRealization)
           } else {
             if (effectivelyWeighted) {
               totalRealisasi = Number(totalRealisasi) + (Number(indRealization) * (Number(indWeight) / 100))
               totalTarget = Number(totalTarget) + (Number(indTarget) * (Number(indWeight) / 100))
             } else {
-              const achievement = Number(indTarget) === 0 ? 100 : (Number(indRealization) / Number(indTarget)) * 100
-              totalRealisasi = Number(totalRealisasi) + achievement
-              totalTarget = Number(totalTarget) + 100
+              // Unweighted indexing: add indicator score directly (e.g. Jabatan, Pendidikan, Masa Kerja, Resiko Pekerjaan)
+              totalRealisasi = Number(totalRealisasi) + Number(indicatorScore)
+              totalTarget = Number(totalTarget) + (Number(indTarget) || 100)
             }
           }
         }
@@ -624,8 +633,8 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
       if (isMedicalUnit) {
         return totalRealisasi
       } else if (!effectivelyWeighted) {
-        // Fallback for unweighted: average achievement
-        return totalTarget > 0 ? (totalRealisasi / totalTarget) * 100 : 0
+        // Unweighted indexing category: return raw total score of all indicators in category
+        return totalRealisasi
       } else if (totalTarget > 0) {
         // Weighted score scaled by category weight
         return (totalRealisasi / totalTarget) * categoryWeight
@@ -633,9 +642,29 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
       return 0
     }
 
+    const calcPriorityScore = () => {
+      let sumPriority = 0
+      for (const a of empAssessments) {
+        const calcMethod = a.m_kpi_indicators?.calculation_method || 'indexing'
+        const catStyle = a.m_kpi_indicators?.m_kpi_categories?.configuration_style
+        if (calcMethod === 'priority' || catStyle === 'priority') {
+          const rawScore = a.score
+          if (rawScore !== null && rawScore !== undefined) {
+            sumPriority += parseFloat(rawScore) || 0
+          } else {
+            const subKey = `${empId}:${a.indicator_id}`
+            const subAgg = subScoreMap.get(subKey)
+            sumPriority += subAgg ? subAgg.score : 0
+          }
+        }
+      }
+      return sumPriority
+    }
+
     const p1 = Number(calcCategoryScore('P1').toFixed(2))
     const p2 = Number(calcCategoryScore('P2').toFixed(2))
     const p3 = Number(calcCategoryScore('P3').toFixed(2))
+    const priorityScore = Number(calcPriorityScore().toFixed(2))
 
     // Catch-all for assessments in other categories to ensure they are added to assessmentDetails
     const remainingAssessments = empAssessments.filter((a: any) => !processedIndices.has(`${a.employee_id}:${a.indicator_id}`))
@@ -656,15 +685,15 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
     }
 
     return {
-      p1, p2, p3,
-      totalScore: Number((p1 + p2 + p3).toFixed(2)),
+      p1, p2, p3, priorityScore,
+      totalScore: Number((p1 + p2 + p3 + priorityScore).toFixed(2)),
       totalActivityRupiah: Number(totalActivityRupiah),
       assessmentDetails
     }
   }
 
   // --- First pass: calculate ALL employee scores and unit totals ---
-  const employeeScoresMap = new Map<string, { emp: any; p1: number; p2: number; p3: number; totalScore: number; totalActivityRupiah: number; assessmentDetails: any[] }>()
+  const employeeScoresMap = new Map<string, { emp: any; p1: number; p2: number; p3: number; priorityScore: number; totalScore: number; totalActivityRupiah: number; assessmentDetails: any[] }>()
   const unitTotalScoresMap = new Map<string, number>()
   const unitTotalActivityMap = new Map<string, number>()
   const unitEmployeeCountMap = new Map<string, number>()
@@ -764,7 +793,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
   for (const [empId, data] of employeeScoresMap.entries()) {
     if (!reportEmployeeIds.has(empId)) continue
 
-    const { emp, p1, p2, p3, totalScore, totalActivityRupiah, assessmentDetails } = data
+    const { emp, p1, p2, p3, priorityScore, totalScore, totalActivityRupiah, assessmentDetails } = data
 
     // Relaxed condition: Include employee if they were fetched in our assessment queries.
     // If they were in empIds and we fetched something (main or sub), they should be here.
@@ -844,6 +873,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
       p1_score: p1,
       p2_score: p2,
       p3_score: p3,
+      priority_score: priorityScore,
       p1_weight: getCatWeight('P1'),
       p2_weight: getCatWeight('P2'),
       p3_weight: getCatWeight('P3'),

@@ -201,12 +201,12 @@ export default function SettingsPage() {
         .from('logos')
         .upload(fileName, logoFile, {
           cacheControl: '3600',
-          upsert: false
+          upsert: true
         })
 
       if (uploadError) {
-        console.error('Upload error:', uploadError)
-        throw uploadError
+        console.warn('Supabase storage upload error, using Data URL fallback:', uploadError)
+        return logoPreview || settings.logo_url
       }
 
       const { data: { publicUrl } } = supabase.storage
@@ -215,9 +215,8 @@ export default function SettingsPage() {
 
       return publicUrl
     } catch (error: any) {
-      console.error('Error uploading logo:', error)
-      toast.error(`Gagal mengunggah logo: ${error.message || 'Unknown error'}`)
-      return null
+      console.warn('Error uploading logo, using Data URL fallback:', error)
+      return logoPreview || settings.logo_url
     }
   }
 

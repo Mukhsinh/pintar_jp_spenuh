@@ -64,3 +64,46 @@ export async function exportPoolReportToPDF(poolId: string) {
         }
     }
 }
+
+export async function createPoolAction(formData: { period: string; global_allocation_percentage: number }) {
+    try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return { success: false, error: 'Tidak terautentikasi' }
+        }
+
+        const adminClient = await createAdminClient()
+
+        // Check existing pool
+        const { data: existingPool } = await adminClient
+            .from('t_pool')
+            .select('id')
+            .eq('period', formData.period)
+            .maybeSingle()
+
+        if (existingPool) {
+            return { success: false, error: 'Pool sudah ada untuk periode ini' }
+        }
+
+        // Insert new pool using admin client
+        const { data, error } = await adminClient
+            .from('t_pool')
+            .insert({
+                period: formData.period,
+                global_allocation_percentage: formData.global_allocation_percentage,
+                revenue_total: 0,
+                deduction_total: 0,
+                status: 'draft'
+            })
+            .select()
+            .single()
+
+        if (error) throw error
+
+        return { success: true, data }
+    } catch (error: any) {
+        console.error('createPoolAction error:', error)
+        return { success: false, error: error.message || 'Gagal membuat pool' }
+    }
+}

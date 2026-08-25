@@ -106,7 +106,12 @@ export default function KPIConfigPage() {
     setIsLoading(true)
     try {
       const result = await getKPIStructure(selectedUnit)
-      if (result.error) throw new Error(result.error)
+      if (result.error) {
+        console.error('Error loading KPI structure:', result.error)
+        setError(`Gagal memuat struktur KPI: ${result.error}`)
+        setIsLoading(false)
+        return
+      }
 
       // Set all data at once to minimize re-renders
       setCategories(result.categories || [])

@@ -28,6 +28,16 @@ export async function GET(request: NextRequest) {
     // Use admin client to bypass RLS for employee lookup
     const adminClient = await createAdminClient()
 
+    const appRole = user.app_metadata?.role
+    const userRoleMeta = user.user_metadata?.role
+    const email = user.email || ''
+
+    const isSuperAdmin =
+      appRole === 'superadmin' ||
+      userRoleMeta === 'superadmin' ||
+      email === 'admin@sungaibahar.com' ||
+      email === 'admin@soeselors.com'
+
     // Try by user_id first
     let currentEmployee: any = null
     const { data: byUserId } = await adminClient
@@ -37,28 +47,20 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (byUserId) {
-      currentEmployee = byUserId
-    } else {
-      const appRole = user.app_metadata?.role
-      const userRole = user.user_metadata?.role
-      const email = user.email
-
-      const isSuperAdmin =
-        appRole === 'superadmin' ||
-        userRole === 'superadmin' ||
-        email === 'admin@sungaibahar.com'
-
-      if (isSuperAdmin) {
-        currentEmployee = {
-          id: user.id,
-          full_name: 'Super Administrator',
-          role: 'superadmin',
-          unit_id: '0'
-        }
-      } else {
-        console.error('No employee record linked to user id:', user.id)
-        return NextResponse.json({ error: 'Employee record not found. Please contact admin to link your account.' }, { status: 404 })
+      currentEmployee = {
+        ...byUserId,
+        role: isSuperAdmin ? 'superadmin' : (byUserId.role || 'employee')
       }
+    } else if (isSuperAdmin) {
+      currentEmployee = {
+        id: user.id,
+        full_name: 'Super Administrator',
+        role: 'superadmin',
+        unit_id: '0'
+      }
+    } else {
+      console.error('No employee record linked to user id:', user.id)
+      return NextResponse.json({ error: 'Employee record not found. Please contact admin to link your account.' }, { status: 404 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Period is required' }, { status: 400 })
     }
 
-    // STUCT UNIT ISOLATION & FILTERING
+    // STRICT UNIT ISOLATION & FILTERING
     const userRole = currentEmployee.role
     const userUnitId = currentEmployee.unit_id
 
@@ -80,20 +82,18 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('period', period)
 
-    if (userRole === 'unit_manager') {
+    if (userRole === 'superadmin') {
+      if (requestedUnitId && requestedUnitId !== 'all') {
+        statusQuery = statusQuery.eq('unit_id', requestedUnitId)
+      }
+    } else if (userRole === 'unit_manager') {
       if (!userUnitId) {
         return NextResponse.json({ error: 'Unit ID not found for manager profile' }, { status: 403 })
       }
       statusQuery = statusQuery.eq('unit_id', userUnitId)
-    } else if (userRole === 'superadmin') {
-      if (requestedUnitId && requestedUnitId !== 'all') {
-        statusQuery = statusQuery.eq('unit_id', requestedUnitId)
-      }
     } else {
       if (userUnitId && userUnitId !== '0') {
         statusQuery = statusQuery.eq('unit_id', userUnitId)
-      } else if (userRole !== 'superadmin') {
-        return NextResponse.json({ error: 'Unauthorized access level' }, { status: 403 })
       }
     }
 

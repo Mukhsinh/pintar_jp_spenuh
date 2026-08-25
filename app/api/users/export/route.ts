@@ -80,9 +80,18 @@ export async function GET() {
       }
     })
 
+    const { getCompanyInfoServer, getFooterServer } = await import('@/lib/services/settings.server.service')
+    const companyInfo = await getCompanyInfoServer()
+    const footerText = await getFooterServer()
+
+    const { buildExcelKopHeader } = await import('@/lib/export/excel-export')
+    const header = buildExcelKopHeader(companyInfo, 'DAFTAR PENGGUNA SISTEM JASPEL', `Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`)
+
     // Create workbook
     const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
+    const ws = XLSX.utils.aoa_to_sheet(header)
+    XLSX.utils.sheet_add_json(ws, exportData, { origin: `A${header.length + 1}` })
+    XLSX.utils.sheet_add_aoa(ws, [[footerText], [`Dicetak: ${new Date().toLocaleString('id-ID')}`]], { origin: `A${header.length + 1 + exportData.length + 2}` })
 
     // Set column widths
     ws['!cols'] = [

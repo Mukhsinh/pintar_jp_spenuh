@@ -15,6 +15,40 @@ interface ReportExportOptions {
 }
 
 /**
+ * Helper to build standard professional Excel Kop Surat rows from company settings
+ */
+export function buildExcelKopHeader(companyInfo: any, title: string, subtitle?: string): any[][] {
+  const contactStr = [
+    companyInfo?.phone ? `Telp: ${companyInfo.phone}` : null,
+    companyInfo?.email ? `Email: ${companyInfo.email}` : null
+  ].filter(Boolean).join(' | ')
+
+  const nameText = (companyInfo?.name || companyInfo?.appName || 'SISTEM JASPEL').toUpperCase()
+
+  const rows: any[][] = [
+    [nameText],
+    [companyInfo?.address || ''],
+  ]
+
+  if (contactStr) {
+    rows.push([contactStr])
+  }
+
+  rows.push(
+    ['━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'],
+    [title.toUpperCase()]
+  )
+
+  if (subtitle) {
+    rows.push([subtitle])
+  }
+
+  rows.push([])
+
+  return rows
+}
+
+/**
  * Export report to Excel with formatting
  * Requirements: 12.5, 16.1, 16.2, 16.7
  */
@@ -33,7 +67,7 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
     case 'employee-slip':
       sheetName = reportType === 'incentive' ? 'Incentive Report' : 'Employee Slip'
       wsData = [
-        ['NIP/NIK', 'NIK', 'Nama Pegawai', 'Unit', 'Status Pegawai', 'Golongan', 'Nama Bank', 'No. Rekening', 'Nama Pemilik Rek', 'Status Pajak', 'P1 Score', 'P2 Score', 'P3 Score', 'Total Skor', 'PIR', 'Rupiah Kuantitatif', 'Insentif Bruto', 'Pajak', 'Keterangan Pajak', 'Insentif Netto'],
+        ['NIP/NIK', 'NIK', 'Nama Pegawai', 'Unit', 'Status Pegawai', 'Golongan', 'Nama Bank', 'No. Rekening', 'Nama Pemilik Rek', 'Status Pajak', 'P1 Score', 'P2 Score', 'P3 Score', 'Skor Prioritas', 'Total Skor', 'PIR', 'Rupiah Kuantitatif', 'Insentif Bruto', 'Pajak', 'Keterangan Pajak', 'Insentif Netto'],
         ...data.map((row: any) => [
           row.employee_code || '-',
           row.nik || '-',
@@ -48,6 +82,7 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
           Math.round(row.p1_score || 0),
           Math.round(row.p2_score || 0),
           Math.round(row.p3_score || 0),
+          Math.round(row.priority_score || 0),
           Math.round(row.total_score || 0),
           Math.round(row.pir_value || 0),
           Math.round(row.total_activity_rupiah || row.total_activity || 0),
@@ -143,20 +178,7 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
   const companyInfo = await getCompanyInfoServer()
 
   // Build Kop Surat
-  const kopSurat = [
-    [companyInfo.name.toUpperCase()],
-    [`${companyInfo.address}`],
-    [
-      [
-        companyInfo.phone ? `Telp: ${companyInfo.phone}` : null,
-        companyInfo.email ? `Email: ${companyInfo.email}` : null
-      ].filter(Boolean).join(' | ')
-    ],
-    ['━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'],
-    [sheetName.toUpperCase()],
-    [`Periode: ${period}`],
-    ['']
-  ]
+  const kopSurat = buildExcelKopHeader(companyInfo, sheetName, `Periode: ${period}`)
 
   // Prepend Kop Surat to wsData
   wsData = [...kopSurat, ...wsData]
@@ -266,19 +288,7 @@ export async function exportToExcelFile({
   const companyInfo = await getCompanyInfoServer()
 
   // Build Kop Surat
-  const kopSurat = [
-    [companyInfo.name.toUpperCase()],
-    [`${companyInfo.address}`],
-    [
-      [
-        companyInfo.phone ? `Telp: ${companyInfo.phone}` : null,
-        companyInfo.email ? `Email: ${companyInfo.email}` : null
-      ].filter(Boolean).join(' | ')
-    ],
-    ['━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'],
-    [sheetName.toUpperCase()],
-    ['']
-  ]
+  const kopSurat = buildExcelKopHeader(companyInfo, sheetName)
 
   // Combine kop, headers and data
   const wsData = [...kopSurat, headers, ...data]

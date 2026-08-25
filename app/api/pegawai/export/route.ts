@@ -3,6 +3,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
+import { addKopSurat, addPdfFooters } from '@/lib/export/pdf-export'
+import { getCompanyInfoServer, getFooterServer } from '@/lib/services/settings.server.service'
 
 // Add type for jsPDF with autoTable
 interface jsPDFWithAutoTable extends jsPDF {
@@ -17,14 +19,6 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    // Check if superadmin from metadata or email
-    const appRole = user.app_metadata?.role
-    const userRole = user.user_metadata?.role
-    const isSuperAdmin =
-      appRole === 'superadmin' ||
-      userRole === 'superadmin' ||
-      user.email === 'admin@sungaibahar.com'
 
     const searchParams = request.nextUrl.searchParams
     const format = searchParams.get('format') || 'excel'
@@ -44,6 +38,9 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
+    const companyInfo = await getCompanyInfoServer()
+    const footerText = await getFooterServer()
+
     const reportDate = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
       month: 'long',
@@ -57,29 +54,18 @@ export async function GET(request: NextRequest) {
         format: 'a4'
       }) as jsPDFWithAutoTable
 
-      // Formal KOP Surat
+      // Dynamic KOP Surat from settings
+      await addKopSurat(doc, companyInfo)
+
+      doc.setFontSize(13)
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      doc.text('RUMAH SAKIT SUNGAI BAHAR', 148.5, 15, { align: 'center' })
+      doc.setTextColor(30, 58, 138)
+      doc.text('LAPORAN DATA PEGAWAI', 148.5, 38, { align: 'center' })
 
-      doc.setFontSize(10)
+      doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
-      doc.text('Kabupaten Muaro Jambi, Provinsi Jambi', 148.5, 21, { align: 'center' })
-      doc.text('Telepon: - | Website: -', 148.5, 26, { align: 'center' })
-
-      // Line separator
-      doc.setLineWidth(0.5)
-      doc.line(15, 30, 282, 30)
-      doc.setLineWidth(0.1)
-      doc.line(15, 31, 282, 31)
-
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('LAPORAN DATA PEGAWAI', 148.5, 40, { align: 'center' })
-
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`Tanggal Laporan: ${reportDate}`, 15, 48)
+      doc.setTextColor(71, 85, 105)
+      doc.text(`Tanggal Cetak: ${reportDate}`, 15, 45)
 
       // Table Data
       const tableRows = (pegawai || []).map((p, index) => [
@@ -94,37 +80,36 @@ export async function GET(request: NextRequest) {
       ])
 
       doc.autoTable({
-        startY: 52,
+        startY: 49,
         head: [['No', 'NIP/Kode', 'Nama Lengkap', 'Unit Kerja', 'Jabatan', 'Status', 'Pajak', 'Status Akun']],
         body: tableRows,
-        theme: 'striped',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 2 },
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8.5, cellPadding: 2.5 },
         columnStyles: {
-          0: { cellWidth: 10 },
+          0: { cellWidth: 12 },
           1: { cellWidth: 30 },
           2: { cellWidth: 60 },
           3: { cellWidth: 50 },
           4: { cellWidth: 40 },
           5: { cellWidth: 20 },
           6: { cellWidth: 20 },
-          7: { cellWidth: 25 }
-        },
-        didDrawPage: (data: any) => {
-          // Footer
-          const pageCount = (doc as any).getNumberOfPages()
-          doc.setFontSize(8)
-          doc.text(`Halaman ${data.pageNumber} dari ${pageCount}`, 282, 195, { align: 'right' })
+          7: { cellWidth: 25, halign: 'center' }
         }
       })
 
       // Signature area on final page
-      const finalY = (doc as any).lastAutoTable.finalY + 15
-      if (finalY < 180) {
+      const finalY = (doc as any).lastAutoTable.finalY + 12
+      if (finalY < 170) {
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(0, 0, 0)
         doc.text('Sungai Bahar, ' + reportDate, 230, finalY)
-        doc.text('Admin Sistem,', 230, finalY + 7)
-        doc.text('( ____________________ )', 230, finalY + 30)
+        doc.text('Admin Sistem,', 230, finalY + 6)
+        doc.text('( ____________________ )', 230, finalY + 28)
       }
+
+      await addPdfFooters(doc, footerText)
 
       const pdfOutput = doc.output('arraybuffer')
 
@@ -135,13 +120,12 @@ export async function GET(request: NextRequest) {
         }
       })
     } else {
-      // Generate Excel with formal header
+      // Generate Excel with formal Kop Surat from settings
+      const { buildExcelKopHeader } = await import('@/lib/export/excel-export')
+      const kopSurat = buildExcelKopHeader(companyInfo, 'LAPORAN DATA PEGAWAI', `Tanggal Cetak: ${reportDate}`)
+
       const worksheetData = [
-        ['RUMAH SAKIT SUNGAI BAHAR'],
-        ['Kabupaten Muaro Jambi, Provinsi Jambi'],
-        ['LAPORAN DATA PEGAWAI'],
-        [`Tanggal Laporan: ${reportDate}`],
-        [], // Empty row
+        ...kopSurat,
         ['No', 'Kode Pegawai', 'NIK', 'Nama Lengkap', 'Unit', 'Jabatan', 'Status Kerja', 'Status Pajak', 'Bank', 'No. Rekening', 'Status Akun']
       ]
 
@@ -159,7 +143,7 @@ export async function GET(request: NextRequest) {
         p.is_active ? 'Aktif' : 'Nonaktif'
       ])
 
-      const finalData = [...worksheetData, ...employeeData]
+      const finalData = [...worksheetData, ...employeeData, [], [footerText], [`Dicetak: ${new Date().toLocaleString('id-ID')}`]]
 
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(finalData)
@@ -177,14 +161,6 @@ export async function GET(request: NextRequest) {
         { wch: 15 }, // Bank
         { wch: 20 }, // Rekening
         { wch: 12 }  // Status Akun
-      ]
-
-      // Merge header cells
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } }, // Title
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } }, // Address
-        { s: { r: 2, c: 0 }, e: { r: 2, c: 10 } }, // Report Title
-        { s: { r: 3, c: 0 }, e: { r: 3, c: 10 } }  // Date
       ]
 
       XLSX.utils.book_append_sheet(wb, ws, 'Data Pegawai')

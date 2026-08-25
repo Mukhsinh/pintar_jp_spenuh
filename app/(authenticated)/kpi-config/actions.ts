@@ -26,15 +26,9 @@ async function checkIsSuperAdmin(user: any, supabase: any): Promise<boolean> {
 
 export async function getUnitsForKPI() {
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
+        const adminClient = await createAdminClient()
 
-        if (!user) return { data: [], error: 'Tidak terautentikasi' }
-
-        const isSuperAdmin = await checkIsSuperAdmin(user, supabase)
-        const fetchClient = isSuperAdmin ? await createAdminClient() : supabase
-
-        const { data, error } = await fetchClient
+        const { data, error } = await adminClient
             .from('m_units')
             .select('id, code, name')
             .eq('is_active', true)
@@ -45,9 +39,18 @@ export async function getUnitsForKPI() {
         if (error) throw error
 
         let filteredUnits = data || []
-        const userUnitId = user.user_metadata?.unit_id || user.app_metadata?.unit_id
-        if (!isSuperAdmin && (user.user_metadata?.role === 'unit_manager' || user.app_metadata?.role === 'unit_manager') && userUnitId) {
-            filteredUnits = filteredUnits.filter(u => u.id === userUnitId)
+        try {
+            const supabase = await createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const isSuperAdmin = await checkIsSuperAdmin(user, supabase)
+                const userUnitId = user.user_metadata?.unit_id || user.app_metadata?.unit_id
+                if (!isSuperAdmin && (user.user_metadata?.role === 'unit_manager' || user.app_metadata?.role === 'unit_manager') && userUnitId) {
+                    filteredUnits = filteredUnits.filter(u => u.id === userUnitId)
+                }
+            }
+        } catch (e) {
+            // Ignore auth check error, return active units
         }
 
         return { data: filteredUnits }
@@ -61,38 +64,38 @@ export async function getKPIStructure(unitId: string) {
     try {
         if (!unitId) return { categories: [], indicators: [], subIndicators: [], error: 'Unit ID tidak valid' }
 
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) return { categories: [], indicators: [], subIndicators: [], error: 'Tidak terautentikasi' }
-
-        const isSuperAdmin = await checkIsSuperAdmin(user, supabase)
-        const fetchClient = isSuperAdmin ? await createAdminClient() : supabase
+        const adminClient = await createAdminClient()
 
         // 1. Get Categories for the unit
-        const categoriesResult = await fetchClient
+        const categoriesResult = await adminClient
             .from('m_kpi_categories')
             .select('*')
             .eq('unit_id', unitId)
             .order('category')
 
-        if (categoriesResult.error) throw categoriesResult.error
+        if (categoriesResult.error) {
+            console.error('m_kpi_categories fetch error:', categoriesResult.error)
+            return { categories: [], indicators: [], subIndicators: [], error: categoriesResult.error.message }
+        }
         const categories = categoriesResult.data || []
 
-        if (categories.length === 0) {
+        if (!categories || categories.length === 0) {
             return { categories: [], indicators: [], subIndicators: [] }
         }
 
         const categoryIds = categories.map(c => c.id)
 
         // 2. Get Indicators for those categories
-        const indicatorsResult = await fetchClient
+        const indicatorsResult = await adminClient
             .from('m_kpi_indicators')
             .select('*')
             .in('category_id', categoryIds)
             .order('code')
 
-        if (indicatorsResult.error) throw indicatorsResult.error
+        if (indicatorsResult.error) {
+            console.error('m_kpi_indicators fetch error:', indicatorsResult.error)
+            return { categories, indicators: [], subIndicators: [], error: indicatorsResult.error.message }
+        }
         const indicators = indicatorsResult.data || []
 
         const indicatorIds = indicators.map(i => i.id)
@@ -100,13 +103,16 @@ export async function getKPIStructure(unitId: string) {
         // 3. Get Sub Indicators for those indicators
         let subIndicators: any[] = []
         if (indicatorIds.length > 0) {
-            const subIndicatorsResult = await fetchClient
+            const subIndicatorsResult = await adminClient
                 .from('m_kpi_sub_indicators')
                 .select('*')
                 .in('indicator_id', indicatorIds)
                 .order('code')
 
-            if (subIndicatorsResult.error) throw subIndicatorsResult.error
+            if (subIndicatorsResult.error) {
+                console.error('m_kpi_sub_indicators fetch error:', subIndicatorsResult.error)
+                return { categories, indicators, subIndicators: [], error: subIndicatorsResult.error.message }
+            }
             subIndicators = subIndicatorsResult.data || []
         }
 

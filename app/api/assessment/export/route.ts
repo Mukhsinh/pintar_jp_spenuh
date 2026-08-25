@@ -79,6 +79,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No assessment data found' }, { status: 404 })
     }
 
+    const { getCompanyInfoServer, getFooterServer } = await import('@/lib/services/settings.server.service')
+    const companyInfo = await getCompanyInfoServer()
+    const footerText = await getFooterServer()
+
+    const { buildExcelKopHeader } = await import('@/lib/export/excel-export')
+    const header = buildExcelKopHeader(companyInfo, 'LAPORAN DETAIL PENILAIAN KPI', `Periode: ${period}`)
+
     // Create workbook
     const workbook = XLSX.utils.book_new()
 
@@ -104,7 +111,10 @@ export async function GET(request: NextRequest) {
       'Terakhir Diubah': assessment.updated_at ? new Date(assessment.updated_at).toLocaleDateString('id-ID') : '-'
     }))
 
-    const detailSheet = XLSX.utils.json_to_sheet(detailData)
+    const detailSheet = XLSX.utils.aoa_to_sheet(header)
+    XLSX.utils.sheet_add_json(detailSheet, detailData, { origin: `A${header.length + 1}` })
+    XLSX.utils.sheet_add_aoa(detailSheet, [[footerText], [`Dicetak: ${new Date().toLocaleString('id-ID')}`]], { origin: `A${header.length + 1 + detailData.length + 2}` })
+
     detailSheet['!cols'] = [
       { wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 20 },
       { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 15 },

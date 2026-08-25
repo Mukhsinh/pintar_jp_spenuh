@@ -43,35 +43,29 @@ export async function GET(request: NextRequest) {
     const totalProportion = unitsWithCounts.reduce((sum, unit) => sum + (Number(unit.proportion_percentage) || 0), 0)
     const totalEmployees = unitsWithCounts.reduce((sum, unit) => sum + (Number(unit.employee_count) || 0), 0)
 
+    const { getCompanyInfoServer, getFooterServer } = await import('@/lib/services/settings.server.service')
+    const companyInfo = await getCompanyInfoServer()
+    const footerText = await getFooterServer()
+
     if (format === 'pdf') {
       const { jsPDF } = await import('jspdf')
       const autoTable = (await import('jspdf-autotable')).default
+      const { addKopSurat, addPdfFooters } = await import('@/lib/export/pdf-export')
 
       const doc = new jsPDF()
 
-      // Kop Surat
-      doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
-      doc.text('PEMERINTAH KABUPATEN MUARO JAMBI', 105, 15, { align: 'center' })
-      doc.setFontSize(16)
-      doc.text('RUMAH SAKIT SUNGAI BAHAR', 105, 22, { align: 'center' })
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Kabupaten Muaro Jambi, Provinsi Jambi', 105, 28, { align: 'center' })
-      doc.text('Email: admin@sungaibahar.com', 105, 33, { align: 'center' })
-
-      // Line separator
-      doc.setLineWidth(0.5)
-      doc.line(20, 38, 190, 38)
-      doc.setLineWidth(0.2)
-      doc.line(20, 39, 190, 39)
+      // Dynamic Kop Surat from settings
+      await addKopSurat(doc, companyInfo)
 
       // Judul Laporan
-      doc.setFontSize(14)
+      doc.setFontSize(13)
       doc.setFont('helvetica', 'bold')
-      doc.text('DAFTAR UNIT KERJA', 105, 50, { align: 'center' })
-      doc.setFontSize(10)
-      doc.text(`Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`, 105, 56, { align: 'center' })
+      doc.setTextColor(30, 58, 138)
+      doc.text('DAFTAR UNIT KERJA', 105, 38, { align: 'center' })
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(71, 85, 105)
+      doc.text(`Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`, 105, 44, { align: 'center' })
 
       // Tabel
       const tableData = unitsWithCounts.map((unit: any, index: number) => [
@@ -84,7 +78,7 @@ export async function GET(request: NextRequest) {
       ])
 
       autoTable(doc, {
-        startY: 65,
+        startY: 48,
         head: [['No', 'Kode', 'Nama Unit', 'Proporsi', 'Pegawai', 'Status']],
         body: tableData,
         foot: [[
@@ -95,13 +89,13 @@ export async function GET(request: NextRequest) {
           { content: totalEmployees.toString(), styles: { fontStyle: 'bold' } },
           ''
         ]],
-        theme: 'striped',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
         footStyles: { fillColor: [240, 240, 240], textColor: 0 },
         styles: { fontSize: 9 },
         columnStyles: {
           0: { cellWidth: 10 },
-          1: { cellWidth: 20 },
+          1: { cellWidth: 25 },
           3: { cellWidth: 25 },
           4: { cellWidth: 20 },
           5: { cellWidth: 20 }
@@ -110,14 +104,18 @@ export async function GET(request: NextRequest) {
 
       // Footer with signature
       const finalY = (doc as any).lastAutoTable.finalY || 70
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`Sungai Bahar, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, 140, finalY + 20)
-      doc.text('Kepala Bagian Umum,', 140, finalY + 25)
+      if (finalY < 230) {
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(0, 0, 0)
+        doc.text(`Sungai Bahar, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, 140, finalY + 15)
+        doc.text('Kepala Bagian Umum,', 140, finalY + 20)
 
-      doc.setFont('helvetica', 'bold')
-      doc.text('--------------------------', 140, finalY + 45)
-      doc.text('NIP. ..........................', 140, finalY + 50)
+        doc.setFont('helvetica', 'bold')
+        doc.text('( ____________________ )', 140, finalY + 40)
+      }
+
+      await addPdfFooters(doc, footerText)
 
       const pdfOutput = doc.output('arraybuffer')
 
@@ -128,7 +126,12 @@ export async function GET(request: NextRequest) {
         }
       })
     } else {
-      // Generate Excel
+      // Generate Excel with formal header from settings
+      const contactStr = [
+        companyInfo.phone ? `Telp: ${companyInfo.phone}` : null,
+        companyInfo.email ? `Email: ${companyInfo.email}` : null
+      ].filter(Boolean).join(' | ')
+
       const excelData = unitsWithCounts.map((unit: any, index: number) => ({
         'No': index + 1,
         'Kode Unit': unit.code,
@@ -150,17 +153,12 @@ export async function GET(request: NextRequest) {
 
       const wb = XLSX.utils.book_new()
 
-      // Header for Excel
-      const header = [
-        ['RUMAH SAKIT SUNGAI BAHAR'],
-        ['Kabupaten Muaro Jambi, Provinsi Jambi'],
-        ['DAFTAR UNIT KERJA'],
-        [`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`],
-        []
-      ]
+      const { buildExcelKopHeader } = await import('@/lib/export/excel-export')
+      const header = buildExcelKopHeader(companyInfo, 'DAFTAR UNIT KERJA', `Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`)
 
       const ws = XLSX.utils.aoa_to_sheet(header)
-      XLSX.utils.sheet_add_json(ws, excelData, { origin: 'A6' })
+      XLSX.utils.sheet_add_json(ws, excelData, { origin: `A${header.length + 1}` })
+      XLSX.utils.sheet_add_aoa(ws, [[footerText], [`Dicetak: ${new Date().toLocaleString('id-ID')}`]], { origin: `A${header.length + 1 + excelData.length + 2}` })
 
       // Set column widths
       ws['!cols'] = [

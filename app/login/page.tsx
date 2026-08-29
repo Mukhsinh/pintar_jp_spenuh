@@ -50,7 +50,7 @@ export default function LoginPage() {
     try {
       const result = await loginServerAction({ email, password })
 
-      if (!result.success) {
+      if (result && !result.success) {
         setError(result.error || 'Email atau kata sandi salah')
         setIsLoading(false)
         return

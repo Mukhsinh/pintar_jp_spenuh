@@ -22,6 +22,8 @@ export async function loginServerAction(formData: { email: string; password: str
         })
         let authErr: any = authErrInitial
 
+        console.warn(`[LOGIN] Initial auth attempt for ${email}. Error:`, authErr?.message, `Session present:`, !!auth?.session)
+
         if (auth?.user && auth?.session) {
             authResult = { user: auth.user, session: auth.session }
         }
@@ -54,8 +56,12 @@ export async function loginServerAction(formData: { email: string; password: str
                 if (!otpErr && otpAuth?.user && otpAuth?.session) {
                     authResult = { user: otpAuth.user, session: otpAuth.session }
                     authErr = null
-                    console.log('[LOGIN] Successfully authenticated via Admin Fallback for:', email)
+                    console.warn('[LOGIN] Successfully authenticated via Admin Fallback for:', email)
+                } else {
+                    console.warn('[LOGIN] OTP auth failed:', otpErr?.message)
                 }
+            } else {
+                console.warn('[LOGIN] Generating link failed:', linkErr?.message)
             }
         }
 
@@ -97,9 +103,10 @@ export async function loginServerAction(formData: { email: string; password: str
             console.warn('[LOGIN SERVER ACTION] Role sync warning:', syncErr)
         }
 
+        console.warn(`[LOGIN] Final authResult success. User: ${authResult.user.email}`)
         return { success: true }
     } catch (err: any) {
-        console.error('[LOGIN SERVER ACTION] Error:', err)
+        console.warn('[LOGIN SERVER ACTION] Error:', err)
         return { success: false, error: err.message || 'Terjadi kesalahan sistem saat login' }
     }
 }

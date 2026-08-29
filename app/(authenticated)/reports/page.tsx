@@ -140,7 +140,7 @@ function IncentiveTable({ data }: { data: any[] }) {
               {formatCurrency(Number(row.total_activity) || Number(row.total_activity_rupiah) || 0)}
             </td>
             <td className="border p-2 text-right font-bold">
-              <div className="text-[10px] text-gray-400 font-normal">(Skor×PIR) + Kuantitatif</div>
+              <div className="text-[10px] text-gray-400 font-normal">(Skor×PIR) + Prio + Kuantitatif</div>
               {formatCurrency(Number(row.gross_incentive) || 0)}
             </td>
             <td className="border p-2 text-right text-red-600">

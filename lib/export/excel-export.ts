@@ -67,7 +67,7 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
     case 'employee-slip':
       sheetName = reportType === 'incentive' ? 'Incentive Report' : 'Employee Slip'
       wsData = [
-        ['NIP/NIK', 'NIK', 'Nama Pegawai', 'Unit', 'Status Pegawai', 'Golongan', 'Nama Bank', 'No. Rekening', 'Nama Pemilik Rek', 'Status Pajak', 'P1 Score', 'P2 Score', 'P3 Score', 'Skor Prioritas', 'Total Skor', 'PIR', 'Rupiah Kuantitatif', 'Insentif Bruto', 'Pajak', 'Keterangan Pajak', 'Insentif Netto'],
+        ['NIP/NIK', 'NIK', 'Nama Pegawai', 'Unit', 'Status Pegawai', 'Golongan', 'Nama Bank', 'No. Rekening', 'Nama Pemilik Rek', 'Status Pajak', 'P1 Score', 'P2 Score', 'P3 Score', 'Skor Prioritas', 'Total Skor', 'Alokasi Unit', 'Pengurang Prioritas Unit', 'Pengurang Kuantitatif Unit', 'PIR', 'Rupiah Kuantitatif', 'Insentif Bruto', 'Pajak', 'Keterangan Pajak', 'Insentif Netto'],
         ...data.map((row: any) => [
           row.employee_code || '-',
           row.nik || '-',
@@ -84,6 +84,9 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
           Math.round(row.p3_score || 0),
           Math.round(row.priority_score || 0),
           Math.round(row.total_score || 0),
+          Math.round(row.unit_allocation || 0),
+          Math.round(row.unit_total_priority || 0),
+          Math.round(row.unit_total_activity || 0),
           Math.round(row.pir_value || 0),
           Math.round(row.total_activity_rupiah || row.total_activity || 0),
           Math.round(row.gross_incentive || 0),
@@ -243,7 +246,11 @@ export async function exportToExcel(options: ReportExportOptions): Promise<Buffe
     { wch: 10 }, // P1
     { wch: 10 }, // P2
     { wch: 10 }, // P3
-    { wch: 12 }, // Total
+    { wch: 12 }, // Skor Prioritas
+    { wch: 12 }, // Total Skor
+    { wch: 20 }, // Alokasi Unit
+    { wch: 25 }, // Pengurang Prioritas
+    { wch: 25 }, // Pengurang Kuantitatif
     { wch: 15 }, // PIR
     { wch: 18 }, // Kuantitatif
     { wch: 18 }, // Bruto

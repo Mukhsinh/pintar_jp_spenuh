@@ -19,16 +19,21 @@ export async function createClient() {
         },
         set(name: string, value: string, options: any) {
           try {
-            cookieStore.set(name, value, options)
-          } catch (error: any) {
-            // Handle cookie setting errors (e.g., in middleware)
+            console.warn(`[SUPABASE COOKIE] Attempting to set ${name}=${value.substring(0, 10)}...`)
+            cookieStore.set(name, value, {
+              ...options,
+              path: '/',
+              secure: process.env.NODE_ENV === 'production' ? options.secure : false
+            })
+          } catch (error) {
+            // Ignored if called from Server Component
           }
         },
         remove(name: string, options: any) {
           try {
-            cookieStore.set(name, '', { ...options, maxAge: 0 })
-          } catch (error: any) {
-            // Handle cookie removal errors
+            cookieStore.set(name, '', { ...options, path: '/', maxAge: 0 })
+          } catch (error) {
+            // Ignored if called from Server Component
           }
         },
       },

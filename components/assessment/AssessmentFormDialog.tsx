@@ -22,6 +22,7 @@ import { Progress } from '@/components/ui/progress'
 import type { AssessmentStatus } from '@/lib/types/assessment.types'
 import type { ScoringCriterion } from '@/lib/types/kpi.types'
 import { isMedicalUnit as checkMedicalUnit } from '@/lib/utils/medical-unit'
+import { formatNumber, formatTariffOrIndex } from '@/lib/utils/format'
 
 interface KPISubIndicator {
   id: string
@@ -782,11 +783,11 @@ export default function AssessmentFormDialog({
                                           <p className="text-xs text-gray-500">
                                             {!isMedicalUnit && `Bobot: ${sub.weight_percentage}%`}
                                             {sub.target_value > 0 && ` • Target: ${sub.target_value}`}
-                                            {isQuantitative && ` • Satuan: ${sub.measurement_unit || 'Volume'} • Tarif Dasar: Rp ${(sub.base_index_value || 0).toLocaleString('id-ID')}`}
+                                            {isQuantitative && ` • Satuan: ${sub.measurement_unit || 'Volume'} • Tarif Dasar: ${formatTariffOrIndex(sub.base_index_value || sub.unit_tariff || 0)}`}
                                           </p>
                                         </div>
                                         <Badge variant="outline" className="bg-white text-xs">
-                                          {isQuantitative ? `Volume: ${subRealization}` : `Skor: ${subScore.toFixed(2)}`}
+                                          {isQuantitative ? `Volume: ${formatTariffOrIndex(subRealization)}` : `Skor: ${formatTariffOrIndex(subScore)}`}
                                         </Badge>
                                       </div>
 
@@ -868,13 +869,13 @@ export default function AssessmentFormDialog({
                                                 <Label className="text-[10px] text-gray-500 mb-1 block">Input Volume ({sub.measurement_unit || 'qty'})</Label>
                                                 <Input
                                                   type="number"
-                                                  step="0.01"
+                                                  step="0.0001"
                                                   className="h-8 text-sm bg-white"
-                                                  placeholder="0.00"
+                                                  placeholder="0.0000"
                                                   value={subRealization || ''}
                                                   onChange={(e) => {
                                                     const vol = parseFloat(e.target.value) || 0
-                                                    const sTariff = sub.base_index_value || 0
+                                                    const sTariff = sub.base_index_value || sub.unit_tariff || 0
                                                     const calculatedScore = vol * sTariff
 
                                                     handleSubAssessmentChange(indicator.id, sub.id, vol, calculatedScore)
@@ -884,7 +885,7 @@ export default function AssessmentFormDialog({
                                               <div className="w-1/3">
                                                 <Label className="text-[10px] text-gray-500 mb-1 block">Hasil Skor/Nilai</Label>
                                                 <div className="h-8 text-xs bg-gray-100 border rounded flex items-center px-2 font-medium">
-                                                  {subScore.toLocaleString('id-ID')}
+                                                  {formatTariffOrIndex(subScore)}
                                                 </div>
                                               </div>
                                             </div>

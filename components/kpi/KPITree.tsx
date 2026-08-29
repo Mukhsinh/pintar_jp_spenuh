@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, memo } from 'react'
 import { ChevronDown, ChevronRight, Edit, Trash2, Plus, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { formatNumber, formatCurrency } from '@/lib/utils/format'
+import { formatNumber, formatCurrency, formatTariffOrIndex } from '@/lib/utils/format'
 import type { KPICategory, KPIIndicator, KPISubIndicator } from '@/lib/types/kpi.types'
 
 interface KPITreeProps {
@@ -363,7 +363,7 @@ const KPITree = memo(function KPITree({
                                         <div className="flex gap-1 mt-2 flex-wrap">
                                           {sub.measurement_type === 'quantitative' ? (
                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
-                                              <span className="font-bold">Tarif Dasar: {formatCurrency(sub.base_index_value || 0)}</span>
+                                              <span className="font-bold">Tarif Dasar: {formatTariffOrIndex(sub.base_index_value || sub.unit_tariff || 0)}</span>
                                               <span className="opacity-70">(Satuan: {sub.measurement_unit || 'Volume'})</span>
                                             </span>
                                           ) : (

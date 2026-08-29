@@ -31,7 +31,9 @@ interface IncentiveSlipData {
   unitProportion: number
   unitAllocation?: number
   unitTotalActivity?: number
+  unit_total_priority?: number
   totalActivityRupiah: number
+  priority_score?: number
   grossIncentive: number
   taxAmount: number
   netIncentive: number
@@ -322,21 +324,26 @@ export async function generateIncentiveSlipPDF(data: IncentiveSlipData | Incenti
 
     doc.setFontSize(9)
     const fmtNum = (val: number) => Math.round(val).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    const fmtDecimal = (val: number) => Number(val).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
     const allocatedForUnit = typeof slip.unitAllocation === 'number' ? slip.unitAllocation : 0;
     const unitActivity = typeof slip.unitTotalActivity === 'number' ? slip.unitTotalActivity : 0;
-    const remainingForIndex = allocatedForUnit - unitActivity;
+    const unitPriority = typeof slip.unit_total_priority === 'number' ? slip.unit_total_priority : 0;
+    const remainingForIndex = allocatedForUnit - unitActivity - unitPriority;
     const pirValue = typeof slip.pirValue === 'number' ? slip.pirValue : 0;
     const totalSkorUnit = typeof slip.totalSkorUnit === 'number' ? slip.totalSkorUnit : 0;
 
     yPos += 7
-    doc.text(`Formula: PIR = ((Alokasi Dana Unit) - (Insentif Kuantitatif Unit)) / Total Skor Seluruh Pegawai di Unit`, 15, yPos)
+    doc.text(`Formula: PIR = ((Alokasi Dana Unit) - (Insentif Prioritas & Kuantitatif Unit)) / Total Skor Seluruh Pegawai di Unit`, 15, yPos)
     yPos += 5
     doc.text(`Proporsi Unit ${slip.unit}`, 20, yPos)
-    doc.text(`: ${fmtNum(slip.unitProportion)}%`, 95, yPos)
+    doc.text(`: ${fmtDecimal(slip.unitProportion)}%`, 95, yPos)
     yPos += 5
     doc.text(`Alokasi Dana Unit (Awal)`, 20, yPos)
     doc.text(`: Rp ${fmtNum(allocatedForUnit)}`, 95, yPos)
+    yPos += 5
+    doc.text(`Pengurang Prioritas Unit`, 20, yPos)
+    doc.text(`: Rp ${fmtNum(unitPriority)}`, 95, yPos)
     yPos += 5
     doc.text(`Pengurang Kuantitatif Unit`, 20, yPos)
     doc.text(`: Rp ${fmtNum(unitActivity)}`, 95, yPos)
@@ -362,10 +369,11 @@ export async function generateIncentiveSlipPDF(data: IncentiveSlipData | Incenti
     const tableRows: any[] = []
     tableRows.push(['A.', incentiveLabel, ''])
     tableRows.push(['', '1. Insentif Berbasis Indeks (Total Skor × PIR)', formatCurrency(slip.index_incentive || 0)])
-    tableRows.push(['', '2. Insentif Berbasis Prioritas (Direct Payout)', formatCurrency(slip.totalActivityRupiah || 0)])
+    tableRows.push(['', '2. Insentif Berbasis Prioritas (Direct Payout)', formatCurrency(slip.priority_score || 0)])
+    tableRows.push(['', '3. Insentif Kuantitatif Unit', formatCurrency(slip.totalActivityRupiah || 0)])
 
     if (slip.guarantee_fee && slip.guarantee_fee > 0) {
-      tableRows.push(['', '3. Guarantee Fee', formatCurrency(slip.guarantee_fee || 0)])
+      tableRows.push(['', '4. Guarantee Fee', formatCurrency(slip.guarantee_fee || 0)])
     }
     tableRows.push(['', '   Total Insentif Bruto', formatCurrency(slip.grossIncentive || 0)])
     tableRows.push(['', '', ''])
@@ -670,7 +678,9 @@ export async function exportToPDF(options: ReportExportOptions): Promise<Uint8Ar
         unitProportion: parseNum(item.unit_proportion),
         unitAllocation: parseNum(item.unit_allocation),
         unitTotalActivity: parseNum(item.unit_total_activity),
+        unit_total_priority: parseNum(item.unit_total_priority),
         totalActivityRupiah: parseNum(item.total_activity_rupiah || item.total_activity),
+        priority_score: parseNum(item.priority_score),
         index_incentive: parseNum(item.index_incentive),
         guarantee_fee: parseNum(item.guarantee_fee),
         grossIncentive: parseNum(item.gross_incentive),

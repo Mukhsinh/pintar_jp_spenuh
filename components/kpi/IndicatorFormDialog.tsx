@@ -511,10 +511,10 @@ export default function IndicatorFormDialog({
                         <Input
                           id="base_index_value_sub"
                           type="number"
-                          step="any"
+                          step="0.0001"
                           value={formData.base_index_value}
                           onChange={(e) => setFormData({ ...formData, base_index_value: e.target.value })}
-                          placeholder="contoh: 150000 atau 0.8"
+                          placeholder="contoh: 150000, 0.05, atau 0.0125 (hingga 4 desimal)"
                         />
                         {errors.base_index_value_sub && (
                           <p className="text-sm text-red-600">{errors.base_index_value_sub}</p>

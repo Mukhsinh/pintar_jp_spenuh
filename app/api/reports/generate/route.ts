@@ -686,7 +686,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
 
     return {
       p1, p2, p3, priorityScore,
-      totalScore: Number((p1 + p2 + p3 + priorityScore).toFixed(2)),
+      totalScore: Number((p1 + p2 + p3).toFixed(2)),
       totalActivityRupiah: Number(totalActivityRupiah),
       assessmentDetails
     }
@@ -696,6 +696,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
   const employeeScoresMap = new Map<string, { emp: any; p1: number; p2: number; p3: number; priorityScore: number; totalScore: number; totalActivityRupiah: number; assessmentDetails: any[] }>()
   const unitTotalScoresMap = new Map<string, number>()
   const unitTotalActivityMap = new Map<string, number>()
+  const unitTotalPriorityMap = new Map<string, number>()
   const unitEmployeeCountMap = new Map<string, number>()
 
   let skippedNoUnit = 0
@@ -714,6 +715,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
 
     unitTotalScoresMap.set(uId, Number(unitTotalScoresMap.get(uId) || 0) + Number(scores.totalScore))
     unitTotalActivityMap.set(uId, Number(unitTotalActivityMap.get(uId) || 0) + Number(scores.totalActivityRupiah))
+    unitTotalPriorityMap.set(uId, Number(unitTotalPriorityMap.get(uId) || 0) + Number(scores.priorityScore))
     unitEmployeeCountMap.set(uId, Number(unitEmployeeCountMap.get(uId) || 0) + 1)
   }
   if (skippedNoUnit > 0) {
@@ -739,6 +741,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
 
     let pir = 0
     const totalActivityValueUnit = unitTotalActivityMap.get(uId) || 0
+    const totalPriorityValueUnit = unitTotalPriorityMap.get(uId) || 0
 
     if (isMedical) {
       // MEDIS Style PIR Calculation: (Allocated - Aggregate Guarantee Fees - Total Activity Value) / Total Index Points
@@ -748,7 +751,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
       // Ideally we filter by employees in this unit
 
       const totalGuaranteeFee = masterDocs?.reduce((acc: number, d: any) => acc + Number(d.pagu_guarantee_fee), 0) || 0
-      const sisaPaguMedis = allocatedForUnit - totalGuaranteeFee - totalActivityValueUnit
+      const sisaPaguMedis = allocatedForUnit - totalGuaranteeFee - totalActivityValueUnit - totalPriorityValueUnit
 
       // If sum of deductions exceeds allocated pool, standard handling
       if (sisaPaguMedis <= 0) {
@@ -758,8 +761,8 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
       }
     } else {
       // STANDARD Style (Non-Medical) with Activity deduction:
-      // PIR = (AllocatedForUnit - TotalActivityValueUnit) / TotalSkorUnit
-      const remainingPool = allocatedForUnit - totalActivityValueUnit;
+      // PIR = (AllocatedForUnit - TotalActivityValueUnit - TotalPriorityValueUnit) / TotalSkorUnit
+      const remainingPool = allocatedForUnit - totalActivityValueUnit - totalPriorityValueUnit;
       pir = (totalSkorUnit > 0) ? (remainingPool / totalSkorUnit) : 0;
       // Allow slightly negative PIR if activities exceed allocation? Business logic check:
       if (pir < 0) pir = 0;
@@ -812,9 +815,9 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
 
     const isMedical = isMedicalUnit(uId, unitName)
 
-    // Formula: (Total Skor x PIR) + Total Activity Rupiah
+    // Formula: (Total Skor x PIR) + Total Activity Rupiah + Priority Score
     const indexIncentive = totalScore * pir
-    let grossIncentive = Number(indexIncentive) + Number(totalActivityRupiah)
+    let grossIncentive = Number(indexIncentive) + Number(totalActivityRupiah) + Number(priorityScore)
 
     let guaranteeFee = 0
     if (isMedical) {
@@ -887,6 +890,7 @@ async function generateIncentiveReport(supabase: any, period: string, unitId?: s
       unit_proportion: Number(unitProp),
       unit_allocation: uId ? (Number(netPool) * (Number(unitProp) / 100)) : 0,
       unit_total_activity: uId ? Number(unitTotalActivityMap.get(uId) || 0) : 0,
+      unit_total_priority: uId ? Number(unitTotalPriorityMap.get(uId) || 0) : 0,
       gross_incentive: grossIncentive,
       tax_amount: taxCheck.amount,
       tax_detail: taxCheck.text,
@@ -1202,6 +1206,8 @@ async function generateEmployeeSlipReport(supabase: any, period: string, unitId?
       unit_proportion: row.unit_proportion,
       unit_allocation: row.unit_allocation,
       unit_total_activity: row.unit_total_activity,
+      unit_total_priority: row.unit_total_priority,
+      priority_score: row.priority_score,
       gross_incentive: row.gross_incentive,
       tax_amount: row.tax_amount,
       tax_detail: row.tax_detail || '-',

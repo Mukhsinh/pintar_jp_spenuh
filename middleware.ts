@@ -98,7 +98,6 @@ export async function middleware(request: NextRequest) {
       employeeCache.clear()
     }
 
-    // 1. Create supabase client
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -108,25 +107,16 @@ export async function middleware(request: NextRequest) {
             return request.cookies.get(name)?.value
           },
           set(name: string, value: string, options: CookieOptions) {
-            // Update request cookies so subsequent calls to get work
-            request.cookies.set({
-              name,
-              value,
-              ...options,
-            })
-            // Set cookie on the same response object to accumulate all cookies
+            request.cookies.set({ name, value, ...options })
             response.cookies.set({
               name,
               value,
               ...options,
+              secure: process.env.NODE_ENV === 'production' ? options.secure : false
             })
           },
           remove(name: string, options: CookieOptions) {
-            request.cookies.set({
-              name,
-              value: '',
-              ...options,
-            })
+            request.cookies.set({ name, value: '', ...options })
             response.cookies.set({
               name,
               value: '',
@@ -174,9 +164,11 @@ export async function middleware(request: NextRequest) {
 
     // 4. Validate session
     if (!session) {
+      console.log(`[MIDDLEWARE DEBUG] No session found. Path: ${pathname}`);
       // Only redirect to login if not already on login page
       if (pathname !== '/login') {
         const loginUrl = new URL('/login', request.url)
+        console.log(`[MIDDLEWARE DEBUG] Redirecting to: ${loginUrl.toString()}`);
         const redirectResponse = NextResponse.redirect(loginUrl)
 
         // Clear auth cookies
@@ -190,6 +182,8 @@ export async function middleware(request: NextRequest) {
       // If already on login page, just continue
       return response
     }
+
+    console.log(`[MIDDLEWARE DEBUG] Session found! User ID: ${session.user.id}, Email: ${session.user.email}`);
 
     // 5. Get employee data and role (with optimized caching)
     let employeeData = employeeCache.get(session.user.id)

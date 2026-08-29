@@ -12,7 +12,7 @@
  */
 export function formatNumber(value: number | string, decimals: number = 0): string {
   const num = typeof value === 'string' ? parseFloat(value) : value
-  
+
   if (isNaN(num)) {
     return '0'
   }
@@ -31,7 +31,7 @@ export function formatNumber(value: number | string, decimals: number = 0): stri
  */
 export function formatCurrency(value: number | string, showSymbol: boolean = true): string {
   const num = typeof value === 'string' ? parseFloat(value) : value
-  
+
   if (isNaN(num)) {
     return showSymbol ? 'Rp 0' : '0'
   }
@@ -49,6 +49,40 @@ export function formatCurrency(value: number | string, showSymbol: boolean = tru
 }
 
 /**
+ * Format tariff or index value, supporting up to 4 decimal places without precision loss
+ * @param value - Value to format
+ * @returns Formatted string
+ */
+export function formatTariffOrIndex(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return '0'
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(num) || num === 0) return '0'
+
+  if (num >= 1000 && Number.isInteger(num)) {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num)
+  }
+
+  if (num >= 1000) {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 4,
+    }).format(num)
+  }
+
+  return new Intl.NumberFormat('id-ID', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(num)
+}
+
+/**
  * Format date with Indonesian conventions (DD/MM/YYYY)
  * @param date - Date to format (Date object or ISO string)
  * @returns Formatted date string
@@ -60,7 +94,7 @@ export function formatDate(date: Date | string | null | undefined): string {
 
   try {
     const dateObj = typeof date === 'string' ? new Date(date) : date
-    
+
     if (isNaN(dateObj.getTime())) {
       return '-'
     }
@@ -88,7 +122,7 @@ export function formatDateTime(date: Date | string | null | undefined): string {
 
   try {
     const dateObj = typeof date === 'string' ? new Date(date) : date
-    
+
     if (isNaN(dateObj.getTime())) {
       return '-'
     }
@@ -119,7 +153,7 @@ export function formatTime(date: Date | string | null | undefined): string {
 
   try {
     const dateObj = typeof date === 'string' ? new Date(date) : date
-    
+
     if (isNaN(dateObj.getTime())) {
       return '-'
     }
@@ -148,7 +182,7 @@ export function formatPercentage(
   isDecimal: boolean = false
 ): string {
   const num = typeof value === 'string' ? parseFloat(value) : value
-  
+
   if (isNaN(num)) {
     return '0%'
   }
@@ -211,16 +245,16 @@ export function formatRelativeTime(date: Date | string): string {
  */
 export function parseFormattedNumber(value: string): number {
   if (!value) return 0
-  
+
   // Remove currency symbol and spaces
   let cleaned = value.replace(/Rp\s?/g, '')
-  
+
   // Replace Indonesian thousands separator (.) with nothing
   cleaned = cleaned.replace(/\./g, '')
-  
+
   // Replace Indonesian decimal separator (,) with dot
   cleaned = cleaned.replace(/,/g, '.')
-  
+
   const num = parseFloat(cleaned)
   return isNaN(num) ? 0 : num
 }
@@ -235,11 +269,11 @@ export function formatMonthName(month: number): string {
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ]
-  
+
   if (month < 1 || month > 12) {
     return '-'
   }
-  
+
   return months[month - 1]
 }
 
@@ -252,10 +286,10 @@ export function formatDayName(day: number): string {
   const days = [
     'Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'
   ]
-  
+
   if (day < 0 || day > 6) {
     return '-'
   }
-  
+
   return days[day]
 }

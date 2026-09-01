@@ -33,6 +33,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { PegawaiTable } from '@/components/pegawai/PegawaiTable'
 import { PegawaiFormDialog } from '@/components/pegawai/PegawaiFormDialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -97,6 +103,7 @@ export default function PegawaiPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [selectedPegawai, setSelectedPegawai] = useState<Pegawai | null>(null)
   const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importStatus, setImportStatus] = useState('')
 
@@ -293,8 +300,45 @@ export default function PegawaiPage() {
     window.open('/api/pegawai/template', '_blank')
   }
 
-  const handleDownloadReport = (type: 'excel' | 'pdf') => {
-    toast.info('Generating report...')
+  const handleDownloadReport = async (type: 'excel' | 'pdf') => {
+    try {
+      setExporting(true)
+      toast.info(`Menyiapkan laporan ${type.toUpperCase()} data pegawai...`)
+
+      const params = new URLSearchParams()
+      params.set('format', type)
+      if (selectedUnitId && selectedUnitId !== 'all') {
+        params.set('unitId', selectedUnitId)
+      }
+      if (debouncedSearchTerm) {
+        params.set('search', debouncedSearchTerm)
+      }
+
+      const response = await fetch(`/api/pegawai/export?${params.toString()}`)
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}))
+        throw new Error(errJson.error || 'Gagal mengunduh laporan')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const dateStr = new Date().toISOString().split('T')[0]
+      a.download = `Laporan_Data_Pegawai_${type.toUpperCase()}_${dateStr}.${type === 'excel' ? 'xlsx' : 'pdf'}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success(`Laporan data pegawai (${type.toUpperCase()}) berhasil diunduh`)
+    } catch (err: any) {
+      console.error('Export error:', err)
+      toast.error(err.message || 'Gagal mengunduh laporan pegawai')
+    } finally {
+      setExporting(false)
+    }
   }
 
   const handleEdit = (p: Pegawai) => {
@@ -429,9 +473,36 @@ export default function PegawaiPage() {
           <p className="text-sm text-gray-500 font-medium italic">Data statistik dan manajemen personel terpadu</p>
         </div>
         <div className="grid grid-cols-2 md:flex md:flex-wrap lg:flex-nowrap gap-2 w-full sm:w-auto">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs md:text-sm font-semibold shadow-sm"
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-indigo-600" />
+                ) : (
+                  <FileDown className="h-4 w-4 mr-2 text-indigo-600" />
+                )}
+                Unduh Laporan
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 bg-white">
+              <DropdownMenuItem onClick={() => handleDownloadReport('pdf')} className="cursor-pointer py-2 font-medium hover:bg-red-50 focus:bg-red-50">
+                <FileText className="h-4 w-4 mr-2 text-red-600" />
+                <span className="text-gray-800">Laporan PDF (.pdf)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadReport('excel')} className="cursor-pointer py-2 font-medium hover:bg-emerald-50 focus:bg-emerald-50">
+                <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+                <span className="text-gray-800">Laporan Excel (.xlsx)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button
             onClick={handleDownloadTemplate}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm shadow-sm"
           >
             <Download className="h-4 w-4 mr-2" />
             Template
@@ -439,7 +510,7 @@ export default function PegawaiPage() {
 
           <Button
             onClick={() => document.getElementById('import-pegawai')?.click()}
-            className="bg-amber-600 hover:bg-amber-700 text-white text-xs md:text-sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white text-xs md:text-sm shadow-sm"
             disabled={importing}
           >
             <Upload className="h-4 w-4 mr-2" />
@@ -449,7 +520,7 @@ export default function PegawaiPage() {
 
           <Button
             onClick={() => setShowCreateDialog(true)}
-            className="col-span-2 md:col-span-1 text-xs md:text-sm bg-indigo-600 hover:bg-indigo-700"
+            className="col-span-2 md:col-span-1 text-xs md:text-sm bg-indigo-600 hover:bg-indigo-700 shadow-sm"
           >
             <Plus className="h-4 w-4 mr-2" />
             Tambah Pegawai

@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
-import { jsPDF } from 'jspdf'
-import 'jspdf-autotable'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { addKopSurat, addPdfFooters } from '@/lib/export/pdf-export'
 import { getCompanyInfoServer, getFooterServer } from '@/lib/services/settings.server.service'
-
-// Add type for jsPDF with autoTable
-interface jsPDFWithAutoTable extends jsPDF {
-  autoTable: (options: any) => jsPDF
-}
+import { buildExcelKopHeader } from '@/lib/export/excel-export'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,24 +18,52 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const format = searchParams.get('format') || 'excel'
+    const unitId = searchParams.get('unitId')
+    const search = searchParams.get('search')
 
-    // Use admin client to bypass RLS and get ALL employees for the report
+    // Use admin client to bypass RLS and get employees matching filters
     const adminClient = await createAdminClient()
-    const { data: pegawai, error } = await adminClient
+    let query = adminClient
       .from('m_employees')
       .select(`
         *,
         m_units (
+          id,
           code,
           name
         )
       `)
+      .neq('role', 'superadmin')
       .order('employee_code', { ascending: true })
+
+    if (unitId && unitId !== 'all') {
+      query = query.eq('unit_id', unitId)
+    }
+
+    if (search && search.trim()) {
+      const trimmed = search.trim()
+      query = query.or(`full_name.ilike.%${trimmed}%,employee_code.ilike.%${trimmed}%,position.ilike.%${trimmed}%,employment_status.ilike.%${trimmed}%`)
+    }
+
+    const { data: pegawai, error } = await query
 
     if (error) throw error
 
     const companyInfo = await getCompanyInfoServer()
     const footerText = await getFooterServer()
+
+    // Determine filter unit label for Kop subtitle
+    let unitFilterName = 'Semua Unit Kerja'
+    if (unitId && unitId !== 'all') {
+      const { data: unitData } = await adminClient
+        .from('m_units')
+        .select('name')
+        .eq('id', unitId)
+        .single()
+      if (unitData?.name) {
+        unitFilterName = unitData.name
+      }
+    }
 
     const reportDate = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -52,62 +76,113 @@ export async function GET(request: NextRequest) {
         orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
-      }) as jsPDFWithAutoTable
+      })
 
-      // Dynamic KOP Surat from settings
+      // Kop Surat
       await addKopSurat(doc, companyInfo)
 
+      const pageWidth = doc.internal.pageSize.width
+      const centerX = pageWidth / 2
+
+      // Title & Filter Subtitle
       doc.setFontSize(13)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(30, 58, 138)
-      doc.text('LAPORAN DATA PEGAWAI', 148.5, 38, { align: 'center' })
+      doc.text('LAPORAN DATA PEGAWAI TERPADU', centerX, 36, { align: 'center' })
 
-      doc.setFontSize(9)
+      doc.setFontSize(8.5)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(71, 85, 105)
-      doc.text(`Tanggal Cetak: ${reportDate}`, 15, 45)
+      doc.text(`Filter Unit: ${unitFilterName}  |  Tanggal Cetak: ${reportDate}  |  Total Data: ${(pegawai || []).length} Pegawai`, centerX, 41, { align: 'center' })
 
-      // Table Data
-      const tableRows = (pegawai || []).map((p, index) => [
-        index + 1,
-        p.employee_code,
-        p.full_name,
-        p.m_units?.name || '-',
-        p.position || '-',
-        p.employment_status || '-',
-        p.tax_status || '-',
-        p.is_active ? 'Aktif' : 'Non-Aktif'
-      ])
+      // Comprehensive PDF Table Data (Including all input fields)
+      const tableRows = (pegawai || []).map((p, index) => {
+        const statusGol = [
+          p.employment_status || '-',
+          p.employment_status === 'PNS' && p.pns_grade && p.pns_grade !== '-' && p.pns_grade !== 'null' ? `(Gol. ${p.pns_grade})` : null
+        ].filter(Boolean).join(' ')
 
-      doc.autoTable({
-        startY: 49,
-        head: [['No', 'NIP/Kode', 'Nama Lengkap', 'Unit Kerja', 'Jabatan', 'Status', 'Pajak', 'Status Akun']],
+        const emailTelp = [
+          p.email ? p.email : null,
+          p.phone ? p.phone : null
+        ].filter(Boolean).join('\n') || '-'
+
+        const taxInfo = [
+          p.tax_status || '-',
+          p.tax_type ? `[${p.tax_type}]` : null
+        ].filter(Boolean).join(' ')
+
+        const bankInfo = p.bank_name ? (
+          `${p.bank_name}: ${p.bank_account_number || '-'}` + (p.bank_account_name ? `\n(a.n. ${p.bank_account_name})` : '')
+        ) : '-'
+
+        return [
+          index + 1,
+          p.employee_code || '-',
+          p.nik || '-',
+          p.full_name || '-',
+          p.m_units?.name || '-',
+          p.position || '-',
+          statusGol,
+          taxInfo,
+          emailTelp,
+          bankInfo,
+          p.is_active ? 'Aktif' : 'Non-Aktif'
+        ]
+      })
+
+      autoTable(doc, {
+        startY: 46,
+        head: [['No', 'NIP / Kode', 'NIK', 'Nama Lengkap', 'Unit Kerja', 'Jabatan', 'Status & Gol.', 'Pajak', 'Email & Telp', 'Rekening Bank', 'Status']],
         body: tableRows,
-        theme: 'grid',
-        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 8.5, cellPadding: 2.5 },
+        theme: 'striped',
+        headStyles: {
+          fillColor: [30, 58, 138],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+          valign: 'middle'
+        },
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 2,
+          valign: 'middle',
+          overflow: 'linebreak'
+        },
         columnStyles: {
-          0: { cellWidth: 12 },
-          1: { cellWidth: 30 },
-          2: { cellWidth: 60 },
-          3: { cellWidth: 50 },
-          4: { cellWidth: 40 },
-          5: { cellWidth: 20 },
-          6: { cellWidth: 20 },
-          7: { cellWidth: 25, halign: 'center' }
+          0: { cellWidth: 9, halign: 'center' },
+          1: { cellWidth: 20, fontStyle: 'bold' },
+          2: { cellWidth: 24 },
+          3: { cellWidth: 38, fontStyle: 'bold' },
+          4: { cellWidth: 30 },
+          5: { cellWidth: 25 },
+          6: { cellWidth: 23, halign: 'center' },
+          7: { cellWidth: 18, halign: 'center' },
+          8: { cellWidth: 32 },
+          9: { cellWidth: 33 },
+          10: { cellWidth: 15, halign: 'center' }
         }
       })
 
       // Signature area on final page
-      const finalY = (doc as any).lastAutoTable.finalY + 12
-      if (finalY < 170) {
-        doc.setFontSize(9)
-        doc.setFont('helvetica', 'normal')
-        doc.setTextColor(0, 0, 0)
-        doc.text('Sungai Bahar, ' + reportDate, 230, finalY)
-        doc.text('Admin Sistem,', 230, finalY + 6)
-        doc.text('( ____________________ )', 230, finalY + 28)
+      const pageHeight = doc.internal.pageSize.height
+      let finalY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : 160
+
+      if (finalY + 35 > pageHeight - 15) {
+        doc.addPage()
+        await addKopSurat(doc, companyInfo)
+        finalY = 45
       }
+
+      const rightMarginX = pageWidth - 65
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(30, 41, 59)
+      doc.text(`Sungai Bahar, ${reportDate}`, rightMarginX, finalY)
+      doc.text('Pengelola Kepegawaian,', rightMarginX, finalY + 5)
+      doc.text('( ___________________________ )', rightMarginX, finalY + 25)
+      doc.text('NIP. ........................................', rightMarginX, finalY + 30)
 
       await addPdfFooters(doc, footerText)
 
@@ -116,52 +191,98 @@ export async function GET(request: NextRequest) {
       return new NextResponse(pdfOutput, {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="Laporan_Pegawai_${new Date().toISOString().split('T')[0]}.pdf"`
+          'Content-Disposition': `attachment; filename="Laporan_Data_Pegawai_${new Date().toISOString().split('T')[0]}.pdf"`
         }
       })
     } else {
-      // Generate Excel with formal Kop Surat from settings
-      const { buildExcelKopHeader } = await import('@/lib/export/excel-export')
-      const kopSurat = buildExcelKopHeader(companyInfo, 'LAPORAN DATA PEGAWAI', `Tanggal Cetak: ${reportDate}`)
+      // Excel Export with formal Kop Surat and complete fields
+      const subtitleText = `Filter Unit: ${unitFilterName}  |  Tanggal Cetak: ${reportDate}  |  Total Data: ${(pegawai || []).length} Pegawai`
+      const kopSurat = buildExcelKopHeader(companyInfo, 'LAPORAN DATA PEGAWAI TERPADU', subtitleText)
 
-      const worksheetData = [
-        ...kopSurat,
-        ['No', 'Kode Pegawai', 'NIK', 'Nama Lengkap', 'Unit', 'Jabatan', 'Status Kerja', 'Status Pajak', 'Bank', 'No. Rekening', 'Status Akun']
+      const headers = [
+        'No',
+        'Kode Pegawai / NIP',
+        'NIK',
+        'Nama Lengkap',
+        'Email',
+        'Unit Kerja',
+        'Jabatan',
+        'Status Kepegawaian',
+        'Golongan PNS',
+        'Status Pajak (PTKP)',
+        'Mekanisme Pajak',
+        'No. Telepon',
+        'Nama Bank',
+        'No. Rekening Bank',
+        'Nama Pemegang Rekening',
+        'Status Akun'
       ]
 
       const employeeData = (pegawai || []).map((p, index) => [
         index + 1,
-        p.employee_code,
-        p.nik || '',
-        p.full_name,
-        p.m_units?.name || '',
-        p.position || '',
-        p.employment_status || '',
-        p.tax_status || '',
-        p.bank_name || '',
-        p.bank_account_number || '',
+        p.employee_code || '-',
+        p.nik || '-',
+        p.full_name || '-',
+        p.email || '-',
+        p.m_units?.name || '-',
+        p.position || '-',
+        p.employment_status || '-',
+        p.employment_status === 'PNS' && p.pns_grade && p.pns_grade !== 'null' && p.pns_grade !== '-' ? `Golongan ${p.pns_grade}` : '-',
+        p.tax_status || '-',
+        p.tax_type || '-',
+        p.phone || '-',
+        p.bank_name || '-',
+        p.bank_account_number || '-',
+        p.bank_account_name || '-',
         p.is_active ? 'Aktif' : 'Nonaktif'
       ])
 
-      const finalData = [...worksheetData, ...employeeData, [], [footerText], [`Dicetak: ${new Date().toLocaleString('id-ID')}`]]
+      const finalData = [
+        ...kopSurat,
+        headers,
+        ...employeeData,
+        [],
+        [footerText],
+        [`Dicetak: ${new Date().toLocaleString('id-ID')}`]
+      ]
 
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(finalData)
 
-      // Column widths
+      // Column widths for complete Excel format
       ws['!cols'] = [
-        { wch: 5 },  // No
-        { wch: 15 }, // Kode
-        { wch: 18 }, // NIK
-        { wch: 30 }, // Nama
-        { wch: 25 }, // Unit
+        { wch: 6 },  // No
+        { wch: 20 }, // Kode/NIP
+        { wch: 20 }, // NIK
+        { wch: 32 }, // Nama
+        { wch: 28 }, // Email
+        { wch: 28 }, // Unit
         { wch: 25 }, // Jabatan
-        { wch: 15 }, // Status Kerja
-        { wch: 12 }, // Pajak
+        { wch: 20 }, // Status Kepeg.
+        { wch: 15 }, // Gol.
+        { wch: 18 }, // Status Pajak
+        { wch: 16 }, // Mekanisme
+        { wch: 18 }, // Telp
         { wch: 15 }, // Bank
-        { wch: 20 }, // Rekening
-        { wch: 12 }  // Status Akun
+        { wch: 22 }, // Rekening
+        { wch: 28 }, // Pemegang Rek
+        { wch: 14 }  // Status Akun
       ]
+
+      // Format header row style in Excel
+      const headerRowIdx = kopSurat.length
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellAddr = XLSX.utils.encode_cell({ r: headerRowIdx, c })
+        if (ws[cellAddr]) {
+          ws[cellAddr].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "1E3A8A" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          }
+        }
+      }
 
       XLSX.utils.book_append_sheet(wb, ws, 'Data Pegawai')
       const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
@@ -169,14 +290,14 @@ export async function GET(request: NextRequest) {
       return new NextResponse(buf, {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="Laporan_Pegawai_${new Date().toISOString().split('T')[0]}.xlsx"`
+          'Content-Disposition': `attachment; filename="Laporan_Data_Pegawai_${new Date().toISOString().split('T')[0]}.xlsx"`
         }
       })
     }
   } catch (error: any) {
     console.error('Error exporting pegawai:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to export pegawai' },
+      { error: error.message || 'Gagal mengekspor data pegawai' },
       { status: 500 }
     )
   }

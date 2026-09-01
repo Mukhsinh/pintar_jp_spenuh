@@ -68,14 +68,10 @@ export async function logAuth(
   }
 }
 
-export async function getAuditLogs(filters: AuditLogFilter, page: number = 1, pageSize: number = 50, supabaseClient?: any) {
-  const supabase = getSupabaseClient(supabaseClient)
-
-  // Use the new view that joins with auth.users
+function buildAuditQuery(supabase: any, filters: AuditLogFilter) {
   let query = supabase
     .from('v_audit_log_with_user')
     .select('*', { count: 'exact' })
-    .order('timestamp', { ascending: false })
 
   if (filters.startDate) {
     query = query.gte('timestamp', filters.startDate)
@@ -96,6 +92,15 @@ export async function getAuditLogs(filters: AuditLogFilter, page: number = 1, pa
   if (filters.operation) {
     query = query.eq('operation', filters.operation)
   }
+
+  return query
+}
+
+export async function getAuditLogs(filters: AuditLogFilter, page: number = 1, pageSize: number = 50, supabaseClient?: any) {
+  const supabase = getSupabaseClient(supabaseClient)
+
+  let query = buildAuditQuery(supabase, filters)
+    .order('timestamp', { ascending: false })
 
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -113,31 +118,8 @@ export async function getAuditLogs(filters: AuditLogFilter, page: number = 1, pa
 export async function exportAuditLogs(filters: AuditLogFilter, supabaseClient?: any) {
   const supabase = getSupabaseClient(supabaseClient)
 
-  // Use the new view that joins with auth.users
-  let query = supabase
-    .from('v_audit_log_with_user')
-    .select('*')
+  let query = buildAuditQuery(supabase, filters)
     .order('timestamp', { ascending: false })
-
-  if (filters.startDate) {
-    query = query.gte('timestamp', filters.startDate)
-  }
-
-  if (filters.endDate) {
-    query = query.lte('timestamp', filters.endDate + 'T23:59:59.999Z')
-  }
-
-  if (filters.user) {
-    query = query.or(`user_name.ilike.%${filters.user}%,employee_name.ilike.%${filters.user}%,user_email.ilike.%${filters.user}%`)
-  }
-
-  if (filters.table) {
-    query = query.eq('table_name', filters.table)
-  }
-
-  if (filters.operation) {
-    query = query.eq('operation', filters.operation)
-  }
 
   const { data, error } = await query
 

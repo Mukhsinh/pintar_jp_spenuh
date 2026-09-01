@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
+import {
+  formatNumber,
+  formatSubIndicatorScoringInfo,
+  formatSubIndicatorExcelCriteria
+} from '@/lib/export/kpi-export-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -166,22 +171,25 @@ async function generatePDFReport(unit: any, categories: any[], appSettings: any)
         { content: ind.code, styles: { fontStyle: 'bold' } },
         { content: ind.name, styles: { fontStyle: 'bold' } },
         { content: `${ind.weight_percentage}%`, styles: { fontStyle: 'bold' } },
-        { content: ind.target_value || 0, styles: { fontStyle: 'bold' } },
+        { content: formatNumber(ind.target_value), styles: { fontStyle: 'bold' } },
         { content: ind.measurement_unit || '-', styles: { fontStyle: 'bold' } },
-        { content: ind.base_index_value && ind.base_index_value > 0 ? (ind.base_index_value > 1 ? new Intl.NumberFormat('id-ID').format(ind.base_index_value) : ind.base_index_value.toString()) : '-', styles: { fontStyle: 'bold' } }
+        { content: ind.base_index_value && ind.base_index_value > 0 ? formatNumber(ind.base_index_value) : '-', styles: { fontStyle: 'bold' } }
       ])
 
       // Sub Indicators Rows
       const subs = ind.m_kpi_sub_indicators || []
       subs.forEach((sub: any) => {
         grandTotalSubIndicators++
+        const scoringInfo = formatSubIndicatorScoringInfo(sub)
+        const subDesc = sub.description ? `\n  Deskripsi: ${sub.description}` : ''
+
         tableBody.push([
           `  ${sub.code}`,
-          `  ${sub.name}`,
+          `  ${sub.name}${subDesc}${scoringInfo}`,
           `${sub.weight_percentage}%`,
-          sub.target_value || 0,
+          formatNumber(sub.target_value),
           sub.measurement_unit || '-',
-          sub.base_index_value && sub.base_index_value > 0 ? (sub.base_index_value > 1 ? new Intl.NumberFormat('id-ID').format(sub.base_index_value) : sub.base_index_value.toString()) : '-'
+          sub.base_index_value && sub.base_index_value > 0 ? formatNumber(sub.base_index_value) : '-'
         ])
       })
     })
@@ -344,22 +352,16 @@ function generateExcelReport(unit: any, categories: any[], appSettings: any) {
         subIndicators.forEach((sub: any) => {
           totalSubWeight += Number(sub.weight_percentage)
 
-          // Handle scoring criteria
-          let criteriaText = '-'
-          if (sub.scoring_criteria && Array.isArray(sub.scoring_criteria)) {
-            criteriaText = sub.scoring_criteria.map((criteria: any, index: number) =>
-              `Skor ${index + 1}: ${criteria.min_value || 0}-${criteria.max_value || 100} (${criteria.label || 'N/A'})`
-            ).join('; ')
-          }
+          const criteriaText = formatSubIndicatorExcelCriteria(sub)
 
           categoryData.push([
             '',
             sub.code,
             sub.name,
             sub.weight_percentage,
-            sub.target_value || 0,
+            formatNumber(sub.target_value),
             sub.measurement_unit || '-',
-            sub.base_index_value || '-',
+            sub.base_index_value ? formatNumber(sub.base_index_value) : '-',
             criteriaText
           ])
         })

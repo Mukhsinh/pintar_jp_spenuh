@@ -20,34 +20,34 @@ export function withApiHandler(
   return async (req: NextRequest, context?: any) => {
     try {
       const { requireAuth = true, allowedRoles, cache } = options
-      
+
       // Add cache headers if specified
       if (cache && req.method === 'GET') {
         const response = await handler(req, context)
         response.headers.set('Cache-Control', `public, max-age=${cache}, s-maxage=${cache}`)
         return response
       }
-      
+
       // Auth validation
       if (requireAuth) {
         const supabase = await createClient()
         const { data: { user }, error } = await supabase.auth.getUser()
-        
+
         if (error || !user) {
           return NextResponse.json(
             { error: 'Unauthorized' },
             { status: 401 }
           )
         }
-        
+
         // Role validation
         if (allowedRoles) {
           const { data: employee } = await supabase
             .from('m_employees')
             .select('role')
-            .eq('id', user.id)
+            .eq('user_id', user.id)
             .single()
-          
+
           if (!employee || !allowedRoles.includes(employee.role)) {
             return NextResponse.json(
               { error: 'Forbidden' },
@@ -56,7 +56,7 @@ export function withApiHandler(
           }
         }
       }
-      
+
       return await handler(req, context)
     } catch (error) {
       return handleApiError(error)

@@ -160,6 +160,49 @@ export interface Pegawai {
   }
 }
 
+export interface User {
+  id: string
+  email: string
+  role: 'superadmin' | 'unit_manager' | 'employee'
+  employee_id?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  pegawai?: Partial<Pegawai>
+}
+
+export interface CreateUserData {
+  email: string
+  role: 'superadmin' | 'unit_manager' | 'employee'
+  employee_id?: string
+  full_name?: string
+  unit_id?: string
+  employee_code?: string
+}
+
+export type UpdateUserData = Partial<CreateUserData> & { is_active?: boolean }
+
+export interface CreateUserInput {
+  email: string
+  password?: string
+  employeeCode: string
+  fullName: string
+  unitId: string
+  role: 'superadmin' | 'unit_manager' | 'employee'
+  taxStatus?: string
+}
+
+export interface UpdateUserInput {
+  email?: string
+  password?: string
+  employeeCode?: string
+  fullName?: string
+  unitId?: string
+  role?: 'superadmin' | 'unit_manager' | 'employee'
+  taxStatus?: string
+  isActive?: boolean
+}
+
 export interface UserMetadata {
   role: 'superadmin' | 'unit_manager' | 'employee'
   full_name?: string
@@ -170,7 +213,16 @@ export interface UserMetadata {
 export interface UserWithEmployee {
   id: string
   email: string
-  user_metadata: UserMetadata
+  role?: 'superadmin' | 'unit_manager' | 'employee'
+  employeeId?: string
+  employeeCode?: string
+  fullName?: string
+  unitId?: string
+  taxStatus?: string | null
+  isActive?: boolean
+  createdAt?: string
+  updatedAt?: string
+  user_metadata?: UserMetadata
   employee?: Pegawai | null
 }
 
@@ -195,3 +247,4 @@ export interface CreatePegawaiData {
 }
 
 export type UpdatePegawaiData = Partial<CreatePegawaiData>
+

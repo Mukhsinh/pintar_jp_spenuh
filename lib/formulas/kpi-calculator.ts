@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { getTERCategory, getTERRate } from './ter-lookup';
 
 // Configure Decimal.js for financial precision (optimized)
 Decimal.set({ precision: 10, rounding: Decimal.ROUND_HALF_UP });
@@ -224,8 +225,6 @@ export function calculatePIR(
   const remainingPool = allocation.minus(totalActivity);
   return remainingPool.div(totalScores);
 }
-
-import { getTERCategory, getTERRate } from './ter-lookup';
 
 /**
  * Calculate PPh 21 using TER (Tarif Efektif Rata-rata) method

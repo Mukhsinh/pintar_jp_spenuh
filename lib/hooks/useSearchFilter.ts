@@ -52,7 +52,7 @@ export function useSearchFilter<T>(
     filters.forEach((filter) => {
       result = result.filter((item) => {
         const value = (item as any)[filter.field]
-        
+
         switch (filter.operator || 'eq') {
           case 'eq':
             return value === filter.value
@@ -73,7 +73,7 @@ export function useSearchFilter<T>(
     // Apply date range filter
     if (dateRangeFilter) {
       const { startDate, endDate, field } = dateRangeFilter
-      
+
       // Validate date range
       if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
         // Invalid range, skip filter
@@ -82,21 +82,21 @@ export function useSearchFilter<T>(
         result = result.filter((item) => {
           const dateValue = (item as any)[field]
           if (!dateValue) return false
-          
+
           const itemDate = new Date(dateValue)
           const start = startDate ? new Date(startDate) : null
           const end = endDate ? new Date(endDate) : null
-          
+
           if (start && itemDate < start) return false
           if (end && itemDate > end) return false
-          
+
           return true
         })
       }
     }
 
     setFilteredData(result)
-  }, [data, debouncedSearchTerm, filters, dateRangeFilter, searchFields])
+  }, [data, debouncedSearchTerm, filters, dateRangeFilter, searchFields.join(',')])
 
   const addFilter = useCallback((filter: FilterConfig) => {
     setFilters((prev) => [...prev, filter])

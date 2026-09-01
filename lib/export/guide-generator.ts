@@ -4,6 +4,8 @@ import { createAdminClient } from '../supabase/server'
 import { addKopSurat, addPdfFooters } from './pdf-export'
 import { getCompanyInfoServer, getFooterServer } from '../services/settings.server.service'
 
+import { formatNumber, formatSubIndicatorScoringInfo } from './kpi-export-utils'
+
 export async function generateSystemGuide(unitId?: string): Promise<Buffer> {
   const adminClient = await createAdminClient()
 
@@ -98,7 +100,7 @@ export async function generateSystemGuide(unitId?: string): Promise<Buffer> {
             { content: ind.code, styles: { fontStyle: 'bold' } },
             { content: ind.name, styles: { fontStyle: 'bold' } },
             `${ind.weight_percentage}%`,
-            ind.target_value,
+            formatNumber(ind.target_value),
             ind.measurement_unit || '-'
           ])
 
@@ -110,16 +112,14 @@ export async function generateSystemGuide(unitId?: string): Promise<Buffer> {
             .order('code')
 
           for (const sub of subs || []) {
-            let scoringInfo = '-'
-            if (sub.scoring_criteria && Array.isArray(sub.scoring_criteria)) {
-              scoringInfo = sub.scoring_criteria.map((c: any, i: number) => `S${i + 1}: ${c.label || ''}`).join(', ')
-            }
+            const scoringInfo = formatSubIndicatorScoringInfo(sub)
+            const subDesc = sub.description ? `\n  Deskripsi: ${sub.description}` : ''
 
             tableBody.push([
               `  ${sub.code}`,
-              `  ${sub.name}\n  (Ket: ${scoringInfo})`,
+              `  ${sub.name}${subDesc}${scoringInfo}`,
               `${sub.weight_percentage}%`,
-              sub.target_value,
+              formatNumber(sub.target_value),
               sub.measurement_unit || '-'
             ])
           }
